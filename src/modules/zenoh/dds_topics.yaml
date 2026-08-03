@@ -110,9 +110,10 @@ publications:
   - topic: /fmu/out/vehicle_local_position
     type: px4_msgs::msg::VehicleLocalPosition
     options:
-      cc: drop
-      rel: best_effort
-      express: true
+      cc: block
+      rel: reliable
+      express: false
+      prio: data_high
 
   - topic: /fmu/out/vehicle_odometry
     type: px4_msgs::msg::VehicleOdometry
@@ -142,6 +143,11 @@ publications:
 
   - topic: /fmu/out/ranging_beacon
     type: px4_msgs::msg::RangingBeacon
+    options:
+      cc: block
+      rel: reliable
+      express: false
+      prio: data_high
 
 # Create uORB::Publication
 subscriptions:
