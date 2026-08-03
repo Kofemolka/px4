@@ -135,12 +135,6 @@ publications:
       rel: reliable
       express: true
 
-  - topic: /fmu/out/navput_attitude
-    type: px4_msgs::msg::NavputAttitude
-
-  - topic: /fmu/out/navput_local_position
-    type: px4_msgs::msg::NavputLocalPosition
-
   - topic: /fmu/out/ranging_beacon
     type: px4_msgs::msg::RangingBeacon
     options:
@@ -148,6 +142,18 @@ publications:
       rel: reliable
       express: false
       prio: data_high
+
+  - topic: /fmu/out/navput_attitude
+    type: px4_msgs::msg::NavputAttitude
+
+  - topic: /fmu/out/navput_local_position
+    type: px4_msgs::msg::NavputLocalPosition
+
+  - topic: /fmu/out/navput_status_flags
+    type: px4_msgs::msg::NavputStatusFlags
+
+  - topic: /fmu/out/navput_fusion_control
+    type: px4_msgs::msg::NavputFusionControl
 
 # Create uORB::Publication
 subscriptions:
