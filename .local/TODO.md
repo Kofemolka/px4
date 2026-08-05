@@ -47,3 +47,4 @@ cd /home/ayakuba/src/poc/px4/build/px4_sitl_sih/src/modules/simulation/simulator
 * [x] Annoying timing exceptions during start when launching under debugger.
 * [ ] Figure out how to publish to custom topic, but reuse existing messages.
 * [x] Expose params to control fusion
+* [x] Fix beacon range distortion in the MLAT and the resulting solution bias.

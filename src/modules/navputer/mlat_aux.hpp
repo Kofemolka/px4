@@ -3,6 +3,7 @@
 
 #include <drivers/drv_hrt.h>
 #include <lib/geo/geo.h>
+#include <lib/lat_lon_alt/lat_lon_alt.hpp>
 #include <matrix/math.hpp>
 
 #include <uORB/PublicationMulti.hpp>
@@ -62,6 +63,34 @@ private:
 	// waiting on this AGP output)
 	bool computeBeaconCentroid(double &lat, double &lon);
 
+	// bearing from (lat1,lon1) to (lat2,lon2), radians, 0=N, clockwise (spherical approximation,
+	// sufficient for choosing a WGS84 directional radius -- ported from lion::geo::get_bearing)
+	static float bearingRad(double lat1_deg, double lon1_deg, double lat2_deg, double lon2_deg);
+
+	// WGS84 radius of curvature in the direction from (center_lat,center_lon) to
+	// (target_lat,target_lon) -- differs from a single global/mean radius by direction and
+	// latitude; ported from lion::geo::get_local_earth_radius (Euler's radius-of-curvature formula)
+	static float directionalEarthRadius(double center_lat_deg, double center_lon_deg,
+					     double target_lat_deg, double target_lon_deg);
+
+	// ratio between the radius _projection assumes (CONSTANTS_RADIUS_OF_EARTH) and the true
+	// directional radius toward (lat,lon) from _projection's own reference point -- multiplying
+	// a physical range by this factor expresses it in the same (uniform-radius-approximated)
+	// metric that _projection's positions already implicitly use. Ported from
+	// lion::filters::MLAT/BeaconsSource's "distortion_factor" (see lion/beacons_source.cpp:
+	// project_beacon() and lion/filters/mlat.cpp: prepare_distances()).
+	float distortionFactor(double lat, double lon) const;
+
+	// picks the lat/lon _projection should be centered on this cycle, in priority order:
+	// the EKF's own current position (converted out of navput_local_position's own reference),
+	// else the last position MLAT itself solved for, else the beacon centroid as a last resort
+	// for a true cold start. Returns false only if none of the three are available yet.
+	// *centered_on_known_point is true unless the beacon-centroid fallback was used, which the
+	// caller uses to decide between local (seeded near the center) and global (bounding-box)
+	// anchors, matching lion::BeaconsSource::update_projection()'s re-centering behavior.
+	bool selectProjectionCenter(const navput_local_position_s &local_pos, matrix::Vector2d &center_lat_lon,
+				    bool &centered_on_known_point);
+
 	// standard 2-D HDOP from the Fisher information matrix of unit line-of-sight vectors
 	bool calcHdop(const matrix::Vector2f &from, const BeaconInput *inputs, int num_inputs, float &hdop);
 
@@ -88,6 +117,12 @@ private:
 	BeaconEntry _beacons[kMaxBeacons] {};
 
 	MapProjection _projection;
+
+	// last position MLAT itself successfully solved for (lat, lon), used as a fallback
+	// projection center (before falling back further to the beacon centroid) when the EKF's
+	// own position is still unknown -- see selectProjectionCenter()
+	bool _has_last_solution{false};
+	matrix::Vector2d _last_solution_lat_lon{};
 
 	hrt_abstime _last_run{0};
 };

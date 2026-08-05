@@ -23,7 +23,7 @@ constexpr float kResidualEpsilon = 10.f;               // m^2
 constexpr float kMinBeaconSeparation2 = 100.f * 100.f; // m^2
 constexpr float kMaxResidual2 = 255.f * 255.f;         // m^2
 constexpr float kLearningRate = 0.1f;
-constexpr int kMaxIterations = 30;
+constexpr int kMaxIterations = 300;
 constexpr float kTolerance = 1.0f; // m
 
 // AGP publication: matches EKF2_AGP0_ID in the 10046_navput_quadx airframe, i.e. the
@@ -80,6 +80,83 @@ bool MlatAux::computeBeaconCentroid(double &lat, double &lon)
 
 	lat = lat_sum / count;
 	lon = lon_sum / count;
+	return true;
+}
+
+float MlatAux::bearingRad(double lat1_deg, double lon1_deg, double lat2_deg, double lon2_deg)
+{
+	const double lat1 = math::radians(lat1_deg);
+	const double lat2 = math::radians(lat2_deg);
+	const double dlon = math::radians(lon2_deg - lon1_deg);
+
+	const double y = sin(dlon) * cos(lat2);
+	const double x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dlon);
+
+	return (float)atan2(y, x);
+}
+
+float MlatAux::directionalEarthRadius(double center_lat_deg, double center_lon_deg,
+				       double target_lat_deg, double target_lon_deg)
+{
+	const double lat_rad = math::radians(center_lat_deg);
+	const double sin_lat = sin(lat_rad);
+	const double w = 1.0 - LatLonAlt::Wgs84::eccentricity2 * sin_lat * sin_lat;
+	const double n = LatLonAlt::Wgs84::equatorial_radius / sqrt(w); // prime-vertical (E-W) radius
+	const double m = LatLonAlt::Wgs84::meridian_radius_of_curvature_numerator / (w * sqrt(w)); // meridian (N-S) radius
+
+	const bool same_point = fabs(target_lat_deg - center_lat_deg) < 1e-9 && fabs(target_lon_deg - center_lon_deg) < 1e-9;
+
+	if (same_point) {
+		return (float)sqrt(m * n);
+	}
+
+	const double bearing = (double)bearingRad(center_lat_deg, center_lon_deg, target_lat_deg, target_lon_deg);
+	const double cos_b = cos(bearing);
+	const double sin_b = sin(bearing);
+
+	return (float)((m * n) / (n * cos_b * cos_b + m * sin_b * sin_b));
+}
+
+float MlatAux::distortionFactor(double lat, double lon) const
+{
+	const double ref_lat = _projection.getProjectionReferenceLat();
+	const double ref_lon = _projection.getProjectionReferenceLon();
+	const double directional_radius = (double)directionalEarthRadius(ref_lat, ref_lon, lat, lon);
+
+	return (float)(CONSTANTS_RADIUS_OF_EARTH / directional_radius);
+}
+
+bool MlatAux::selectProjectionCenter(const navput_local_position_s &local_pos, matrix::Vector2d &center_lat_lon,
+				      bool &centered_on_known_point)
+{
+	if (local_pos.xy_valid && local_pos.xy_global) {
+		MapProjection ref_projection;
+		ref_projection.initReference(local_pos.ref_lat, local_pos.ref_lon);
+
+		double lat;
+		double lon;
+		ref_projection.reproject(local_pos.x, local_pos.y, lat, lon);
+
+		center_lat_lon = matrix::Vector2d(lat, lon);
+		centered_on_known_point = true;
+		return true;
+	}
+
+	if (_has_last_solution) {
+		center_lat_lon = _last_solution_lat_lon;
+		centered_on_known_point = true;
+		return true;
+	}
+
+	double lat;
+	double lon;
+
+	if (!computeBeaconCentroid(lat, lon)) {
+		return false;
+	}
+
+	center_lat_lon = matrix::Vector2d(lat, lon);
+	centered_on_known_point = false;
 	return true;
 }
 
@@ -331,19 +408,18 @@ bool MlatAux::solve()
 		return false;
 	}
 
-	if (!_projection.isInitialized()) {
-		double lat;
-		double lon;
+	matrix::Vector2d center_lat_lon;
+	bool have_last_pos = false;
 
-		if (!computeBeaconCentroid(lat, lon)) {
-			return false; // no beacons seen yet, nothing to center the projection on
-		}
-
-		_projection.initReference(lat, lon, hrt_absolute_time());
+	if (!selectProjectionCenter(local_pos, center_lat_lon, have_last_pos)) {
+		return false; // no beacons seen yet, nothing to center the projection on
 	}
 
-	const bool have_last_pos = local_pos.xy_valid;
-	const matrix::Vector2f last_pos(local_pos.x, local_pos.y);
+	// re-centered every cycle (matching lion::BeaconsSource::update_projection()) so that
+	// distortionFactor() stays an accurate proxy for the true vehicle-to-beacon geometry
+	_projection.initReference(center_lat_lon(0), center_lat_lon(1), hrt_absolute_time());
+
+	const matrix::Vector2f last_pos(0.f, 0.f); // _projection is centered exactly on last_pos this cycle
 	const bool have_own_alt = local_pos.z_global;
 	const float own_alt = local_pos.ref_alt - local_pos.z;
 
@@ -375,6 +451,9 @@ bool MlatAux::solve()
 				range = sqrtf(beacon.range * beacon.range - dz * dz);
 			}
 		}
+
+		const float distortion = distortionFactor(beacon.lat, beacon.lon);
+		range *= distortion;
 
 		input.range = range;
 		input.range_accuracy = beacon.range_accuracy;
@@ -432,6 +511,9 @@ bool MlatAux::solve()
 	double lat;
 	double lon;
 	_projection.reproject(solution(0), solution(1), lat, lon);
+
+	_has_last_solution = true;
+	_last_solution_lat_lon = matrix::Vector2d(lat, lon);
 
 	aux_global_position_s agp{};
 	agp.timestamp_sample = latest_timestamp_sample;
