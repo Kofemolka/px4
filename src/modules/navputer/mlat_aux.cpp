@@ -16,8 +16,7 @@ constexpr hrt_abstime kMaxBeaconAge = 1_s;
 // geometry gate
 constexpr float kMaxHdop = 5.0f;
 
-// MLAT solver (ported from lion::filters::MLAT / ArduPilot AP_NavEKF3_RngBcnFusion SolveMlat)
-constexpr int kNumSeeds = 5;
+// MLAT solver tuning (ported from lion::filters::MLAT / ArduPilot AP_NavEKF3_RngBcnFusion SolveMlat)
 constexpr float kLocalAnchorOffset = 1000.f;           // m
 constexpr float kBasinRadius2 = 50.f * 50.f;           // m^2
 constexpr float kResidualEpsilon = 10.f;               // m^2
@@ -31,31 +30,16 @@ constexpr float kTolerance = 1.0f; // m
 // already-enabled slot 0 (Navputer::Navputer() hardcodes _fc.agp[0].enabled = true).
 constexpr uint8_t kAgpId = 111;
 
-struct BeaconInput {
-	matrix::Vector2f pos; // local north/east, m
-	float range{0.f};     // flattened 2D ground range, m
-	float range_accuracy{0.f};
-	uint64_t timestamp_sample{0};
-};
+} // namespace
 
-struct Candidate {
-	bool valid{false};
-	matrix::Vector2f anchor;
-	matrix::Vector2f pos;
-	float residual{1e10f};
-	uint8_t votes{0};
-};
-
-float squaredNorm(const matrix::Vector2f &v)
+float MlatAux::squaredNorm(const matrix::Vector2f &v)
 {
 	return v(0) * v(0) + v(1) * v(1);
 }
 
-// counts geometrically distinct beacons: beacons closer than kMinBeaconSeparation2 to an
-// already-counted one add no independent geometry and are folded together
-int countDistinctBeacons(const BeaconInput *inputs, int num_inputs)
+int MlatAux::countDistinctBeacons(const BeaconInput *inputs, int num_inputs)
 {
-	bool counted[MlatAux::kMaxBeacons] {};
+	bool counted[kMaxBeacons] {};
 	int distinct = 0;
 
 	for (int i = 0; i < num_inputs; i++) {
@@ -76,8 +60,30 @@ int countDistinctBeacons(const BeaconInput *inputs, int num_inputs)
 	return distinct;
 }
 
-// standard 2-D HDOP from the Fisher information matrix of unit line-of-sight vectors
-bool calcHdop(const matrix::Vector2f &from, const BeaconInput *inputs, int num_inputs, float &hdop)
+bool MlatAux::computeBeaconCentroid(double &lat, double &lon)
+{
+	double lat_sum = 0.0;
+	double lon_sum = 0.0;
+	int count = 0;
+
+	for (int i = 0; i < kMaxBeacons; i++) {
+		if (_beacons[i].valid) {
+			lat_sum += _beacons[i].lat;
+			lon_sum += _beacons[i].lon;
+			count++;
+		}
+	}
+
+	if (count == 0) {
+		return false;
+	}
+
+	lat = lat_sum / count;
+	lon = lon_sum / count;
+	return true;
+}
+
+bool MlatAux::calcHdop(const matrix::Vector2f &from, const BeaconInput *inputs, int num_inputs, float &hdop)
 {
 	float hxx = 0.f;
 	float hyy = 0.f;
@@ -114,7 +120,7 @@ bool calcHdop(const matrix::Vector2f &from, const BeaconInput *inputs, int num_i
 	return true;
 }
 
-void solveCandidate(Candidate &candidate, const BeaconInput *inputs, int num_inputs)
+void MlatAux::solveCandidate(Candidate &candidate, const BeaconInput *inputs, int num_inputs)
 {
 	matrix::Vector2f solution = candidate.anchor;
 	float residual = 1e10f;
@@ -167,7 +173,7 @@ void solveCandidate(Candidate &candidate, const BeaconInput *inputs, int num_inp
 	candidate.votes = 1;
 }
 
-void buildLocalAnchors(Candidate (&candidates)[kNumSeeds], const matrix::Vector2f &last_pos)
+void MlatAux::buildLocalAnchors(Candidate (&candidates)[kNumSeeds], const matrix::Vector2f &last_pos)
 {
 	candidates[0].anchor = last_pos;
 	candidates[1].anchor = last_pos + matrix::Vector2f(kLocalAnchorOffset, 0.f); // N
@@ -176,7 +182,7 @@ void buildLocalAnchors(Candidate (&candidates)[kNumSeeds], const matrix::Vector2
 	candidates[4].anchor = last_pos + matrix::Vector2f(0.f, -kLocalAnchorOffset); // W
 }
 
-void buildGlobalAnchors(Candidate (&candidates)[kNumSeeds], const BeaconInput *inputs, int num_inputs)
+void MlatAux::buildGlobalAnchors(Candidate (&candidates)[kNumSeeds], const BeaconInput *inputs, int num_inputs)
 {
 	float min_n = FLT_MAX;
 	float max_n = -FLT_MAX;
@@ -200,9 +206,7 @@ void buildGlobalAnchors(Candidate (&candidates)[kNumSeeds], const BeaconInput *i
 	candidates[4].anchor = matrix::Vector2f((min_n + max_n) * 0.5f, (min_e + max_e) * 0.5f);
 }
 
-// merges candidates that converged within kBasinRadius2 of each other, keeping the
-// lower-residual member as representative and summing votes (ported from MLAT::evaluate())
-void mergeBasins(Candidate (&candidates)[kNumSeeds])
+void MlatAux::mergeBasins(Candidate (&candidates)[kNumSeeds])
 {
 	for (int i = 0; i < kNumSeeds; i++) {
 		if (!candidates[i].valid) {
@@ -229,9 +233,8 @@ void mergeBasins(Candidate (&candidates)[kNumSeeds])
 	}
 }
 
-// picks the accepted solution among the merged basins, rejecting ambiguous cold-start fixes
-bool evaluate(Candidate (&candidates)[kNumSeeds], bool have_last_pos, const matrix::Vector2f &last_pos,
-	      matrix::Vector2f &result)
+bool MlatAux::evaluate(Candidate (&candidates)[kNumSeeds], bool have_last_pos, const matrix::Vector2f &last_pos,
+			matrix::Vector2f &result)
 {
 	mergeBasins(candidates);
 
@@ -279,8 +282,6 @@ bool evaluate(Candidate (&candidates)[kNumSeeds], bool have_last_pos, const matr
 	result = candidates[best].pos;
 	return true;
 }
-
-} // namespace
 
 void MlatAux::updateBeaconStore()
 {
@@ -331,12 +332,14 @@ bool MlatAux::solve()
 	}
 
 	if (!_projection.isInitialized()) {
-		if (local_pos.xy_global) {
-			_projection.initReference(local_pos.ref_lat, local_pos.ref_lon, local_pos.ref_timestamp);
+		double lat;
+		double lon;
 
-		} else {
-			return false;
+		if (!computeBeaconCentroid(lat, lon)) {
+			return false; // no beacons seen yet, nothing to center the projection on
 		}
+
+		_projection.initReference(lat, lon, hrt_absolute_time());
 	}
 
 	const bool have_last_pos = local_pos.xy_valid;
