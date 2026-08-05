@@ -3,8 +3,6 @@
     "launch": {
         "version": "0.2.0",
         "configurations": [
-
-
 		{
 			"name": "Navputer",
 			"type": "cppdbg",
@@ -35,8 +33,14 @@
 					"description": "Set Disassembly Flavor to Intel",
 					"text": "-gdb-set disassembly-flavor intel",
 					"ignoreFailures": true
+				},
+				{
+					"description": "PX4 ignore wq signals",
+					"text": "handle SIGCONT nostop noprint nopass",
+					"ignoreFailures": true
 				}
-			]
+			],
+			"visualizerFile": "/home/kofe/.config/Code/User/workspaceStorage/8c9a2685b22df66c38fb7df0c72942ae/tonka3000.qtvsctools/qt.natvis.xml"
 		}
 	]
     }
