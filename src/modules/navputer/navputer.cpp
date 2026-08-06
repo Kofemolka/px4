@@ -45,28 +45,15 @@ static px4::atomic<Navputer *> _instance {};
 Navputer::Navputer(const px4::wq_config_t &config, bool replay_mode):
 	ModuleParams(nullptr),
 	ScheduledWorkItem(MODULE_NAME, config),
+	_fusion_controller(this, *_ekf.getFusionControlHandle()),
 	_motion_detector(this),
 	_params(_ekf.getParamHandle()),
-	_fc(*_ekf.getFusionControlHandle()),
 	_param_npt_rngbc_ctrl(_params->ekf2_rngbc_ctrl),
 	_param_npt_rngbc_delay(_params->ekf2_rngbc_delay),
 	_param_npt_rngbc_noise(_params->ekf2_rngbc_noise),
 	_param_npt_rngbc_gate(_params->ekf2_rngbc_gate)
 {
 	AdvertiseTopics();
-
-	SyncFusionControlFlags();
-
-	// TODO: temp solution. AUX can set origin if AGP fusion is enabled
-	_ekf.resetGlobalPositionTo(49.796766, 24.347826, 270);
-}
-
-void Navputer::SyncFusionControlFlags()
-{
-	_fc.baro.enabled = _param_npt_fuse_baro.get();
-	_fc.mag.enabled = _param_npt_fuse_mag.get();
-	_fc.rngbcn.enabled = _param_npt_fuse_rngbc.get();
-	_fc.agp[0].enabled = _param_npt_fuse_agp0.get();
 }
 
 void Navputer::UpdateSystemFlags(const hrt_abstime timestamp)
@@ -104,7 +91,6 @@ void Navputer::AdvertiseTopics()
 	_attitude_pub.advertise();
 	_local_position_pub.advertise();
 }
-
 
 int Navputer::task_spawn(int argc, char *argv[])
 {
@@ -151,8 +137,6 @@ void Navputer::Run()
 
 		// update parameters from storage
 		updateParams();
-
-		SyncFusionControlFlags();
 
 		_ekf.updateParameters();
 	}
@@ -247,6 +231,8 @@ void Navputer::Run()
 		UpdateBaroSample(ekf2_timestamps);
 		UpdateMagSample(ekf2_timestamps);
 		UpdateRangingBeaconSample(ekf2_timestamps);
+
+		_fusion_controller.update(_ekf);
 
 		if (_ekf.update()) {
 			if (!_system_flags_initialized) {
@@ -414,19 +400,22 @@ void Navputer::PublishLocalPosition(const hrt_abstime &timestamp)
 void Navputer::PublishFusionControl(const hrt_abstime &timestamp)
 {
 	navput_fusion_control_s msg{};
-	msg.gps_intended[0] = _fc.gps.intended();
-	msg.of_intended     = _fc.of.intended();
-	msg.ev_intended     = _fc.ev.intended();
+
+	const auto *fc = _ekf.getFusionControlHandle();
+
+	msg.gps_intended[0] = fc->gps.intended();
+	msg.of_intended     = fc->of.intended();
+	msg.ev_intended     = fc->ev.intended();
 
 	for (uint8_t i = 0; i < MAX_AGP_INSTANCES; i++) {
-		msg.agp_intended[i] = _fc.agp[i].intended();
+		msg.agp_intended[i] = fc->agp[i].intended();
 	}
 
-	msg.baro_intended   = _fc.baro.intended();
-	msg.rng_intended    = _fc.rng.intended();
-	msg.mag_intended    = _fc.mag.intended();
-	msg.aspd_intended   = _fc.aspd.intended();
-	msg.rngbcn_intended = _fc.rngbcn.intended();
+	msg.baro_intended   = fc->baro.intended();
+	msg.rng_intended    = fc->rng.intended();
+	msg.mag_intended    = fc->mag.intended();
+	msg.aspd_intended   = fc->aspd.intended();
+	msg.rngbcn_intended = fc->rngbcn.intended();
 
 	const auto &cs = _ekf.control_status_flags();
 	msg.gps_active[0] = cs.gnss_pos || cs.gps_hgt || cs.gnss_vel || cs.gnss_yaw;

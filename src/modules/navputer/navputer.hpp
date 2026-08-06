@@ -99,6 +99,7 @@
 #include "motion_detector.hpp"
 
 #include "mlat_aux.hpp"
+#include "fusion_controller.hpp"
 
 using namespace time_literals;
 
@@ -143,7 +144,7 @@ private:
 
 	void AdvertiseTopics();
 	void VerifyParams();
-	void SyncFusionControlFlags();
+
 	void UpdateSystemFlags(hrt_abstime timestamp);
 	void UpdateMotionDetector(const imuSample& imu_sample);
 
@@ -232,27 +233,20 @@ private:
 	bool _callback_registered{false};
 	bool _system_flags_initialized{false};
 
-	MotionDetector _motion_detector;
-
-	MlatAux _mlat_aux;
-
 	Ekf _ekf;
 
+	MlatAux _mlat_aux;
+	FusionController _fusion_controller;
+	MotionDetector _motion_detector;
+
 	parameters *_params;
-	FusionControl &_fc;
 
 	DEFINE_PARAMETERS(
 		// ranging beacon fusion
 		(ParamExtInt<px4::params::NPT_RNGBC_CTRL>) _param_npt_rngbc_ctrl,
 		(ParamExtFloat<px4::params::NPT_RNGBC_DELAY>) _param_npt_rngbc_delay,
 		(ParamExtFloat<px4::params::NPT_RNGBC_NOISE>) _param_npt_rngbc_noise,
-		(ParamExtFloat<px4::params::NPT_RNGBC_GATE>) _param_npt_rngbc_gate,
-
-		// per-source fusion enable
-		(ParamBool<px4::params::NPT_FUSE_BARO>) _param_npt_fuse_baro,
-		(ParamBool<px4::params::NPT_FUSE_MAG>) _param_npt_fuse_mag,
-		(ParamBool<px4::params::NPT_FUSE_RNGBC>) _param_npt_fuse_rngbc,
-		(ParamBool<px4::params::NPT_FUSE_AGP0>) _param_npt_fuse_agp0
+		(ParamExtFloat<px4::params::NPT_RNGBC_GATE>) _param_npt_rngbc_gate
 	)
 };
 #endif // !NAVPUTER_HPP
