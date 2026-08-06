@@ -144,6 +144,8 @@ private:
 	void AdvertiseTopics();
 	void VerifyParams();
 	void SyncFusionControlFlags();
+	void UpdateSystemFlags(hrt_abstime timestamp);
+	void UpdateMotionDetector(const imuSample& imu_sample);
 
 	void PublishAttitude(const hrt_abstime &timestamp);
 	void PublishLocalPosition(const hrt_abstime &timestamp);
@@ -228,6 +230,7 @@ private:
 	uORB::Publication<navput_fusion_control_s>   	_fc_pub{ORB_ID(navput_fusion_control)};
 
 	bool _callback_registered{false};
+	bool _system_flags_initialized{false};
 
 	MotionDetector _motion_detector;
 

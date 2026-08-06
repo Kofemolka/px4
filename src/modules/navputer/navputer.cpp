@@ -69,6 +69,40 @@ void Navputer::SyncFusionControlFlags()
 	_fc.agp[0].enabled = _param_npt_fuse_agp0.get();
 }
 
+void Navputer::UpdateSystemFlags(const hrt_abstime timestamp)
+{
+	const bool landed_stationary = _motion_detector.state() == MotionDetector::State::LandedStationary;
+
+	systemFlagUpdate flags{};
+	flags.time_us = timestamp;
+	flags.at_rest = landed_stationary;
+	flags.in_air = !landed_stationary;
+
+	// Queue flag update into EKF.
+	// When EKF's time horizon comes to the corresponding update - the update will be applied.
+	_ekf.setSystemFlagData(flags);
+}
+
+void Navputer::UpdateMotionDetector(const imuSample& imu_sample)
+{
+	const MotionDetector::State previous_motion_state = _motion_detector.state();
+
+	const MotionDetector::Input motion_detector_input {
+		.timestamp = imu_sample.time_us,
+		.delta_angle = imu_sample.delta_ang,
+		.delta_angle_dt = imu_sample.delta_ang_dt,
+		.delta_velocity = imu_sample.delta_vel,
+		.delta_velocity_dt = imu_sample.delta_vel_dt,
+	};
+	_motion_detector.update(motion_detector_input);
+
+	const bool motion_state_changed = _motion_detector.state() != previous_motion_state;
+
+	if (_system_flags_initialized && motion_state_changed) {
+		UpdateSystemFlags(imu_sample.time_us);
+	}
+}
+
 Navputer::~Navputer()
 {
 
@@ -195,16 +229,7 @@ void Navputer::Run()
 		// push imu data into estimator
 		_ekf.setIMUData(imu_sample_new);
 
-		{
-			const MotionDetector::Input motion_detector_input {
-				.timestamp = imu_sample_new.time_us,
-				.delta_angle = imu_sample_new.delta_ang,
-				.delta_angle_dt = imu_sample_new.delta_ang_dt,
-				.delta_velocity = imu_sample_new.delta_vel,
-				.delta_velocity_dt = imu_sample_new.delta_vel_dt,
-			};
-			_motion_detector.update(motion_detector_input);
-		}
+		UpdateMotionDetector(imu_sample_new);
 
 		// integrate time to monitor time slippage
 		if (_start_time_us > 0) {
@@ -232,12 +257,12 @@ void Navputer::Run()
 		UpdateMagSample(ekf2_timestamps);
 		UpdateRangingBeaconSample(ekf2_timestamps);
 
-		const bool landed_stationary = _motion_detector.state() == MotionDetector::State::LandedStationary;
-		_ekf.set_vehicle_at_rest(landed_stationary);
-		_ekf.set_in_air_status(!landed_stationary);
-		_ekf.set_constant_pos(landed_stationary);
-
 		if (_ekf.update()) {
+			if (!_system_flags_initialized) {
+				UpdateSystemFlags(now);
+				_system_flags_initialized = true;
+			}
+
 			PublishLocalPosition(now);
 			PublishStatusFlags(now);
 			PublishFusionControl(now);
