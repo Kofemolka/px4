@@ -51,10 +51,8 @@ class MotionDetector : public ModuleParams
 public:
 	enum class State
 	{
-		Unknown,
-		MaybeStationary,
-		Stationary,
-		Moving,
+		LandedStationary,
+		AirborneMoving,
 	};
 
 	struct Input {
@@ -65,9 +63,6 @@ public:
 
 		matrix::Vector3f delta_velocity;
 		float delta_velocity_dt;
-
-		bool velocity_valid;
-		matrix::Vector3f velocity;
 	};
 public:
 	explicit MotionDetector(ModuleParams *parent);
@@ -76,27 +71,21 @@ public:
 	State state() const;
 
 private:
-	void reset();
 	bool is_imu_valid(const Input& input) const;
-	void recalculate_state(bool stationary_enough, bool definitely_moving, hrt_abstime timestamp);
 
 private:
 	static constexpr float kGravityM_s2 = 9.81f;
 
 	DEFINE_PARAMETERS(
 		// gates for MotionDetector
-		(ParamFloat<px4::params::MD_GT_STAT_GYR>) _param_motdet_gate_stat_gyro,
-		(ParamFloat<px4::params::MD_GT_STAT_ACC>) _param_motdet_gate_stat_accel,
-		(ParamFloat<px4::params::MD_GT_STAT_SPD>) _param_motdet_gate_stat_speed,
-		(ParamInt<px4::params::MD_STAT_CF_TIME>) _param_motdet_stat_confirmation_time,
 		(ParamFloat<px4::params::MD_GT_MOT_GYR>) _param_motdet_gate_mot_gyro,
 		(ParamFloat<px4::params::MD_GT_MOT_ACC>) _param_motdet_gate_mot_accel,
-		(ParamFloat<px4::params::MD_GT_MOT_SPD>) _param_motdet_gate_mot_speed
+		(ParamInt<px4::params::MD_MOT_CF_TIME>) _param_motdet_motion_confirmation_time
 	)
 
 private:
-	State _state{State::Unknown};
-	hrt_abstime _stationary_candidate_started_at{0};
+	State _state{State::LandedStationary};
+	hrt_abstime _motion_candidate_started_at{0};
 };
 
 #endif // !MOTION_DETECTOR_1234_HPP

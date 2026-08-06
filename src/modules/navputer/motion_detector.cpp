@@ -40,19 +40,11 @@
 
 #include "motion_detector.hpp"
 
-#include <matrix/Vector2.hpp>
-
 #include <cmath>
 
 MotionDetector::MotionDetector(ModuleParams *parent)
 	: ModuleParams(parent)
 {
-}
-
-void MotionDetector::reset()
-{
-	_state = State::Moving;
-	_stationary_candidate_started_at = 0;
 }
 
 bool MotionDetector::is_imu_valid(const Input& input) const
@@ -64,53 +56,16 @@ bool MotionDetector::is_imu_valid(const Input& input) const
 	return valid;
 }
 
-void MotionDetector::recalculate_state(const bool stationary_enough, const bool definitely_moving,
-				       const hrt_abstime timestamp)
-{
-	switch (_state) {
-		case State::Unknown:
-		case State::Moving:
-			if (stationary_enough)
-			{
-				_state = State::MaybeStationary;
-				_stationary_candidate_started_at = timestamp;
-			}
-			else
-			{
-				_state = State::Moving;
-				_stationary_candidate_started_at = 0;
-			}
-			break;
-
-		case State::MaybeStationary:
-			if (definitely_moving || !stationary_enough)
-			{
-				_state = State::Moving;
-				_stationary_candidate_started_at = 0;
-
-			}
-			else if (timestamp >= _stationary_candidate_started_at
-				 + static_cast<hrt_abstime>(_param_motdet_stat_confirmation_time.get()))
-			{
-				_state = State::Stationary;
-			}
-			break;
-
-		case State::Stationary:
-			if (definitely_moving)
-			{
-				_state = State::Moving;
-				_stationary_candidate_started_at = 0;
-			}
-			break;
-	}
-}
-
 void MotionDetector::update(const Input& input)
 {
+	if (_state == State::AirborneMoving)
+	{
+		return;
+	}
+
 	if (!is_imu_valid(input))
 	{
-		reset();
+		_motion_candidate_started_at = 0;
 		return;
 	}
 
@@ -120,24 +75,26 @@ void MotionDetector::update(const Input& input)
 	const float gyro_magnitude = gyro_rate.norm();
 	const float accel_magnitude = fabsf(accel_rate.norm() - kGravityM_s2);
 
-	float hor_speed = 0.f;
-
-	if (input.velocity_valid && input.velocity.isAllFinite())
-	{
-		hor_speed = matrix::Vector2f{input.velocity(0), input.velocity(1)}.norm();
-	}
-
-	const bool stationary_enough =
-		gyro_magnitude <= _param_motdet_gate_stat_gyro.get()
-		&& accel_magnitude <= _param_motdet_gate_stat_accel.get()
-		&& (!input.velocity_valid || hor_speed <= _param_motdet_gate_stat_speed.get());
-
 	const bool definitely_moving =
 		gyro_magnitude > _param_motdet_gate_mot_gyro.get()
-		|| accel_magnitude > _param_motdet_gate_mot_accel.get()
-		|| (input.velocity_valid && hor_speed > _param_motdet_gate_mot_speed.get());
+		|| accel_magnitude > _param_motdet_gate_mot_accel.get();
 
-	recalculate_state(stationary_enough, definitely_moving, input.timestamp);
+	if (definitely_moving)
+	{
+		if (_motion_candidate_started_at == 0)
+		{
+			_motion_candidate_started_at = input.timestamp;
+		}
+		else if (input.timestamp >= _motion_candidate_started_at
+			 + static_cast<hrt_abstime>(_param_motdet_motion_confirmation_time.get()))
+		{
+			_state = State::AirborneMoving;
+		}
+	}
+	else
+	{
+		_motion_candidate_started_at = 0;
+	}
 }
 
 MotionDetector::State MotionDetector::state() const
