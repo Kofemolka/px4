@@ -72,6 +72,18 @@ parameters:
       type: boolean
       default: 1
 
+    NPT_FC_AGP_LATCH:
+      description:
+        short: Minimum time to hold aux global position fusion enabled
+        long: Once aux global position fusion is enabled, keep it enabled for at least
+          this long even if the enable condition drops out, to avoid rapidly toggling
+          fusion on and off.
+      type: float
+      default: 5.0
+      min: 0.0
+      unit: s
+      decimal: 1
+
     NPT_MD_MOT_GYR:
       description:
         short: Min gate for moving Gyro

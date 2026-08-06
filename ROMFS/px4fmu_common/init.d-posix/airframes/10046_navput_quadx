@@ -64,5 +64,6 @@ param set-default NPT_FUSE_BARO 1
 param set-default NPT_FUSE_MAG 1
 param set-default NPT_FUSE_RNGBC 1
 param set-default NPT_FUSE_AGP0 1
+param set-default NPT_FC_AGP_LATCH 5.0
 
 navputer start

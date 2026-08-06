@@ -427,15 +427,11 @@ void Navputer::PublishFusionControl(const hrt_abstime &timestamp)
 	msg.aspd_active   = cs.fuse_aspd;
 	msg.rngbcn_active = cs.rngbcn_fusion;
 
-#if defined(CONFIG_EKF2_AUX_GLOBAL_POSITION)
-	{
-		const uint8_t agp_mask = _ekf.getAgpFusingBitmask();
+	const uint8_t agp_mask = _ekf.getAgpFusingBitmask();
 
-		for (uint8_t i = 0; i < MAX_AGP_INSTANCES; i++) {
-			msg.agp_active[i] = agp_mask & (1u << i);
-		}
+	for (uint8_t i = 0; i < MAX_AGP_INSTANCES; i++) {
+		msg.agp_active[i] = agp_mask & (1u << i);
 	}
-#endif
 
 	msg.timestamp = hrt_absolute_time();
 	_fc_pub.publish(msg);
