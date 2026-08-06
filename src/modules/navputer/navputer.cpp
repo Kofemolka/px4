@@ -45,6 +45,7 @@ static px4::atomic<Navputer *> _instance {};
 Navputer::Navputer(const px4::wq_config_t &config, bool replay_mode):
 	ModuleParams(nullptr),
 	ScheduledWorkItem(MODULE_NAME, config),
+	_motion_detector(this),
 	_params(_ekf.getParamHandle()),
 	_fc(*_ekf.getFusionControlHandle()),
 	_param_npt_rngbc_ctrl(_params->ekf2_rngbc_ctrl),
@@ -194,6 +195,25 @@ void Navputer::Run()
 		// push imu data into estimator
 		_ekf.setIMUData(imu_sample_new);
 
+		// Updating MotionDetector
+		{
+			const Vector3f velocity = _ekf.getVelocity();
+			const bool velocity_valid =
+				velocity.isAllFinite()
+				&& _ekf.isLocalHorizontalPositionValid();
+
+			const MotionDetector::Input input {
+				.timestamp = imu_sample_new.time_us,
+				.delta_angle = imu_sample_new.delta_ang,
+				.delta_angle_dt = imu_sample_new.delta_ang_dt,
+				.delta_velocity = imu_sample_new.delta_vel,
+				.delta_velocity_dt = imu_sample_new.delta_vel_dt,
+				.velocity_valid = velocity_valid,
+				.velocity = velocity
+			};
+			_motion_detector.update(input);
+		}
+
 		// integrate time to monitor time slippage
 		if (_start_time_us > 0) {
 			_integrated_time_us += imu_dt;
@@ -220,6 +240,7 @@ void Navputer::Run()
 		UpdateMagSample(ekf2_timestamps);
 		UpdateRangingBeaconSample(ekf2_timestamps);
 
+		_ekf.set_vehicle_at_rest(_motion_detector.state() == MotionDetector::State::Stationary);
 
 		if (_ekf.update()) {
 			PublishLocalPosition(now);

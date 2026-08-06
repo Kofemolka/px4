@@ -96,6 +96,8 @@
 #include <uORB/topics/navput_fusion_control.h>
 #include <uORB/topics/navput_aid_source1d.h>
 
+#include "motion_detector.hpp"
+
 #include "mlat_aux.hpp"
 
 using namespace time_literals;
@@ -226,6 +228,8 @@ private:
 	uORB::Publication<navput_fusion_control_s>   	_fc_pub{ORB_ID(navput_fusion_control)};
 
 	bool _callback_registered{false};
+
+	MotionDetector _motion_detector;
 
 	MlatAux _mlat_aux;
 
