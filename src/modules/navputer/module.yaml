@@ -72,25 +72,26 @@ parameters:
       type: boolean
       default: 1
 
-    MD_GT_MOT_GYR:
+    NPT_MD_MOT_GYR:
       description:
         short: Min gate for moving Gyro
         long: Gate which detects minimum Gyro magnitude that is considered as moving
       type: float
       default: 0.05
       unit: rad/s
-    MD_GT_MOT_ACC:
+    NPT_MD_MOT_ACC:
       description:
         short: Min gate for moving Acceleration
         long: Gate which detects minimum Acceleration magnitude that is considered as moving
       type: float
       default: 0.6
       unit: m/s^2
-    MD_MOT_CF_TIME:
+    NPT_MD_CF_TIME:
       description:
         short: Confirmation time for motion
         long: Amount of continuous motion time needed to transition from landed stationary to airborne moving
       type: int32
-      default: 300000
+      default: 300
       min: 0
-      unit: us
+      max: 10000
+      unit: ms
