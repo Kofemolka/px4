@@ -237,7 +237,7 @@ void MlatAux::solveCandidate(Candidate &candidate, const BeaconInput *inputs, in
 		}
 	}
 
-	candidate.residual = residual;
+	candidate.residual = fsqrt(residual);
 
 	if (residual > kMaxResidual2) {
 		candidate.valid = false;
@@ -311,7 +311,7 @@ void MlatAux::mergeBasins(Candidate (&candidates)[kNumSeeds])
 }
 
 bool MlatAux::evaluate(Candidate (&candidates)[kNumSeeds], bool have_last_pos, const matrix::Vector2f &last_pos,
-			matrix::Vector2f &result)
+			Candidate &solution)
 {
 	mergeBasins(candidates);
 
@@ -337,7 +337,7 @@ bool MlatAux::evaluate(Candidate (&candidates)[kNumSeeds], bool have_last_pos, c
 	}
 
 	if (second < 0) {
-		result = candidates[best].pos;
+		solution = candidates[best];
 		return true;
 	}
 
@@ -352,11 +352,11 @@ bool MlatAux::evaluate(Candidate (&candidates)[kNumSeeds], bool have_last_pos, c
 
 		const float dist_best = squaredNorm(candidates[best].pos - last_pos);
 		const float dist_second = squaredNorm(candidates[second].pos - last_pos);
-		result = (dist_second < dist_best) ? candidates[second].pos : candidates[best].pos;
+		solution = (dist_second < dist_best) ? candidates[second] : candidates[best];
 		return true;
 	}
 
-	result = candidates[best].pos;
+	solution = candidates[best];
 	return true;
 }
 
@@ -415,8 +415,8 @@ bool MlatAux::solve()
 		return false; // no beacons seen yet, nothing to center the projection on
 	}
 
-	// re-centered every cycle (matching lion::BeaconsSource::update_projection()) so that
-	// distortionFactor() stays an accurate proxy for the true vehicle-to-beacon geometry
+	// re-centered every cycle so that distortionFactor() stays
+	// an accurate proxy for the true vehicle-to-beacon geometry
 	_projection.initReference(center_lat_lon(0), center_lat_lon(1), hrt_absolute_time());
 
 	const matrix::Vector2f last_pos(0.f, 0.f); // _projection is centered exactly on last_pos this cycle
@@ -456,7 +456,6 @@ bool MlatAux::solve()
 		range *= distortion;
 
 		input.range = range;
-		input.range_accuracy = beacon.range_accuracy;
 		input.timestamp_sample = beacon.timestamp_sample;
 		latest_timestamp_sample = math::max(latest_timestamp_sample, beacon.timestamp_sample);
 		num_inputs++;
@@ -489,28 +488,20 @@ bool MlatAux::solve()
 		solveCandidate(candidates[i], inputs, num_inputs);
 	}
 
-	matrix::Vector2f solution;
+	Candidate solution;
 
 	if (!evaluate(candidates, have_last_pos, last_pos, solution)) {
 		return false;
 	}
 
 	float solution_hdop = kMaxHdop;
-	calcHdop(solution, inputs, num_inputs, solution_hdop);
-
-	float mean_range_accuracy = 0.f;
-
-	for (int i = 0; i < num_inputs; i++) {
-		mean_range_accuracy += inputs[i].range_accuracy;
-	}
-
-	mean_range_accuracy /= num_inputs;
+	calcHdop(solution.pos, inputs, num_inputs, solution_hdop);
 
 	const float hdop_factor = solution_hdop <= 3.0f ? 1.0f : fminf(10.0f, 1.0f + (solution_hdop - 3.0f) / 3.0f);
 
 	double lat;
 	double lon;
-	_projection.reproject(solution(0), solution(1), lat, lon);
+	_projection.reproject(solution.pos(0), solution.pos(1), lat, lon);
 
 	_has_last_solution = true;
 	_last_solution_lat_lon = matrix::Vector2d(lat, lon);
@@ -522,7 +513,7 @@ bool MlatAux::solve()
 	agp.lat = lat;
 	agp.lon = lon;
 	agp.alt = have_own_alt ? own_alt : NAN;
-	agp.eph = mean_range_accuracy * hdop_factor;
+	agp.eph = solution.residual * hdop_factor;
 	agp.epv = have_own_alt ? local_pos.epv : NAN;
 	agp.lat_lon_reset_counter = 0;
 	agp.timestamp = hrt_absolute_time();
