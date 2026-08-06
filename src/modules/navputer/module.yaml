@@ -91,6 +91,6 @@ parameters:
         short: Confirmation time for motion
         long: Amount of continuous motion time needed to transition from landed stationary to airborne moving
       type: int32
-      default: 100000
+      default: 300000
       min: 0
       unit: us
