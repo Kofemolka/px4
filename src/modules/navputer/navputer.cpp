@@ -195,23 +195,15 @@ void Navputer::Run()
 		// push imu data into estimator
 		_ekf.setIMUData(imu_sample_new);
 
-		// Updating MotionDetector
 		{
-			const Vector3f velocity = _ekf.getVelocity();
-			const bool velocity_valid =
-				velocity.isAllFinite()
-				&& _ekf.isLocalHorizontalPositionValid();
-
-			const MotionDetector::Input input {
+			const MotionDetector::Input motion_detector_input {
 				.timestamp = imu_sample_new.time_us,
 				.delta_angle = imu_sample_new.delta_ang,
 				.delta_angle_dt = imu_sample_new.delta_ang_dt,
 				.delta_velocity = imu_sample_new.delta_vel,
 				.delta_velocity_dt = imu_sample_new.delta_vel_dt,
-				.velocity_valid = velocity_valid,
-				.velocity = velocity
 			};
-			_motion_detector.update(input);
+			_motion_detector.update(motion_detector_input);
 		}
 
 		// integrate time to monitor time slippage
@@ -240,7 +232,10 @@ void Navputer::Run()
 		UpdateMagSample(ekf2_timestamps);
 		UpdateRangingBeaconSample(ekf2_timestamps);
 
-		_ekf.set_vehicle_at_rest(_motion_detector.state() == MotionDetector::State::Stationary);
+		const bool landed_stationary = _motion_detector.state() == MotionDetector::State::LandedStationary;
+		_ekf.set_vehicle_at_rest(landed_stationary);
+		_ekf.set_in_air_status(!landed_stationary);
+		_ekf.set_constant_pos(landed_stationary);
 
 		if (_ekf.update()) {
 			PublishLocalPosition(now);
