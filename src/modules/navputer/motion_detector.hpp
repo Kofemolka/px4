@@ -38,6 +38,7 @@
  * @author
  */
 
+#include "EKF/common.h"
 #include <drivers/drv_hrt.h>
 #include <px4_platform_common/module_params.h>
 
@@ -54,33 +55,21 @@ public:
 		LandedStationary,
 		AirborneMoving,
 	};
-
-	struct Input {
-		hrt_abstime timestamp;
-
-		matrix::Vector3f delta_angle;
-		float delta_angle_dt;
-
-		matrix::Vector3f delta_velocity;
-		float delta_velocity_dt;
-	};
 public:
 	explicit MotionDetector(ModuleParams *parent);
 
-	void update(const Input& input);
+	void update(const estimator::imuSample& input);
 	State state() const;
 
 private:
-	bool is_imu_valid(const Input& input) const;
+	bool is_imu_valid(const estimator::imuSample& input) const;
 
 private:
-	static constexpr float kGravityM_s2 = 9.81f;
-
 	DEFINE_PARAMETERS(
 		// gates for MotionDetector
-		(ParamFloat<px4::params::MD_GT_MOT_GYR>) _param_motdet_gate_mot_gyro,
-		(ParamFloat<px4::params::MD_GT_MOT_ACC>) _param_motdet_gate_mot_accel,
-		(ParamInt<px4::params::MD_MOT_CF_TIME>) _param_motdet_motion_confirmation_time
+		(ParamFloat<px4::params::NPT_MD_MOT_GYR>) _param_motion_gyro,
+		(ParamFloat<px4::params::NPT_MD_MOT_ACC>) _param_motion_accel,
+		(ParamInt<px4::params::NPT_MD_CF_TIME>) _param_motion_confirmation_time_ms
 	)
 
 private:

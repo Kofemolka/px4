@@ -86,16 +86,7 @@ void Navputer::UpdateSystemFlags(const hrt_abstime timestamp)
 void Navputer::UpdateMotionDetector(const imuSample& imu_sample)
 {
 	const MotionDetector::State previous_motion_state = _motion_detector.state();
-
-	const MotionDetector::Input motion_detector_input {
-		.timestamp = imu_sample.time_us,
-		.delta_angle = imu_sample.delta_ang,
-		.delta_angle_dt = imu_sample.delta_ang_dt,
-		.delta_velocity = imu_sample.delta_vel,
-		.delta_velocity_dt = imu_sample.delta_vel_dt,
-	};
-	_motion_detector.update(motion_detector_input);
-
+	_motion_detector.update(imu_sample);
 	const bool motion_state_changed = _motion_detector.state() != previous_motion_state;
 
 	if (_system_flags_initialized && motion_state_changed) {

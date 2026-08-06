@@ -40,6 +40,8 @@
 
 #include "motion_detector.hpp"
 
+#include <lib/geo/geo.h>
+
 #include <cmath>
 
 MotionDetector::MotionDetector(ModuleParams *parent)
@@ -47,16 +49,16 @@ MotionDetector::MotionDetector(ModuleParams *parent)
 {
 }
 
-bool MotionDetector::is_imu_valid(const Input& input) const
+bool MotionDetector::is_imu_valid(const estimator::imuSample& input) const
 {
-	const bool valid = input.delta_angle_dt > 0
-		&& input.delta_velocity_dt > 0
-		&& input.delta_angle.isAllFinite()
-		&& input.delta_velocity.isAllFinite();
+	const bool valid = input.delta_ang_dt > 0
+		&& input.delta_vel_dt > 0
+		&& input.delta_ang.isAllFinite()
+		&& input.delta_vel.isAllFinite();
 	return valid;
 }
 
-void MotionDetector::update(const Input& input)
+void MotionDetector::update(const estimator::imuSample& input)
 {
 	if (_state == State::AirborneMoving)
 	{
@@ -69,24 +71,26 @@ void MotionDetector::update(const Input& input)
 		return;
 	}
 
-	const matrix::Vector3f gyro_rate = input.delta_angle / input.delta_angle_dt;
-	const matrix::Vector3f accel_rate = input.delta_velocity / input.delta_velocity_dt;
+	const matrix::Vector3f gyro_rate = input.delta_ang / input.delta_ang_dt;
+	const matrix::Vector3f accel_rate = input.delta_vel / input.delta_vel_dt;
 
 	const float gyro_magnitude = gyro_rate.norm();
-	const float accel_magnitude = fabsf(accel_rate.norm() - kGravityM_s2);
+	const float accel_magnitude = fabsf(accel_rate.norm() - CONSTANTS_ONE_G);
 
 	const bool definitely_moving =
-		gyro_magnitude > _param_motdet_gate_mot_gyro.get()
-		|| accel_magnitude > _param_motdet_gate_mot_accel.get();
+		gyro_magnitude > _param_motion_gyro.get()
+		|| accel_magnitude > _param_motion_accel.get();
 
 	if (definitely_moving)
 	{
+		const hrt_abstime confirmation_time_us =
+			static_cast<hrt_abstime>(_param_motion_confirmation_time_ms.get()) * 1000ULL;
+
 		if (_motion_candidate_started_at == 0)
 		{
-			_motion_candidate_started_at = input.timestamp;
+			_motion_candidate_started_at = input.time_us;
 		}
-		else if (input.timestamp >= _motion_candidate_started_at
-			 + static_cast<hrt_abstime>(_param_motdet_motion_confirmation_time.get()))
+		else if (input.time_us >= _motion_candidate_started_at + confirmation_time_us)
 		{
 			_state = State::AirborneMoving;
 		}
