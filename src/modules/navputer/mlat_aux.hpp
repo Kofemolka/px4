@@ -40,7 +40,6 @@ private:
 	struct BeaconInput {
 		matrix::Vector2f pos; // local north/east, m
 		float range{0.f};     // flattened 2D ground range, m
-		float range_accuracy{0.f};
 		uint64_t timestamp_sample{0};
 	};
 
@@ -50,6 +49,11 @@ private:
 		matrix::Vector2f pos;
 		float residual{1e10f};
 		uint8_t votes{0};
+	};
+
+	struct Solution {
+		matrix::Vector2f pos;
+		float residual{1e10f};
 	};
 
 	static float squaredNorm(const matrix::Vector2f &v);
@@ -105,7 +109,7 @@ private:
 
 	// picks the accepted solution among the merged basins, rejecting ambiguous cold-start fixes
 	bool evaluate(Candidate (&candidates)[kNumSeeds], bool have_last_pos, const matrix::Vector2f &last_pos,
-		      matrix::Vector2f &result);
+		      Candidate &solution);
 
 	void updateBeaconStore();
 	bool solve();
