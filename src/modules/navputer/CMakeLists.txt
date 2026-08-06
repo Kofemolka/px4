@@ -45,6 +45,8 @@ set(NAVPUTER_SRCS
 	navputer.hpp
 	mlat_aux.cpp
 	mlat_aux.hpp
+	motion_detector.hpp
+	motion_detector.cpp
 )
 
 px4_add_module(

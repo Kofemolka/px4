@@ -1,0 +1,102 @@
+/****************************************************************************
+ *
+ *   Copyright (c) 2015-2023 PX4 Development Team. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in
+ *    the documentation and/or other materials provided with the
+ *    distribution.
+ * 3. Neither the name PX4 nor the names of its contributors may be
+ *    used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
+ * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
+ * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ *
+ ****************************************************************************/
+
+/**
+ * @file motion_detector.hpp
+ * Implementation of the attitude and position estimator.
+ *
+ * @author
+ */
+
+#include <drivers/drv_hrt.h>
+#include <px4_platform_common/module_params.h>
+
+#include <matrix/Vector3.hpp>
+
+#ifndef MOTION_DETECTOR_1234_HPP
+#define MOTION_DETECTOR_1234_HPP
+
+class MotionDetector : public ModuleParams
+{
+public:
+	enum class State
+	{
+		Unknown,
+		MaybeStationary,
+		Stationary,
+		Moving,
+	};
+
+	struct Input {
+		hrt_abstime timestamp;
+
+		matrix::Vector3f delta_angle;
+		float delta_angle_dt;
+
+		matrix::Vector3f delta_velocity;
+		float delta_velocity_dt;
+
+		bool velocity_valid;
+		matrix::Vector3f velocity;
+	};
+public:
+	explicit MotionDetector(ModuleParams *parent);
+
+	void update(const Input& input);
+	State state() const;
+
+private:
+	void reset();
+	bool is_imu_valid(const Input& input) const;
+	void recalculate_state(bool stationary_enough, bool definitely_moving, hrt_abstime timestamp);
+
+private:
+	static constexpr float kGravityM_s2 = 9.81f;
+
+	DEFINE_PARAMETERS(
+		// gates for MotionDetector
+		(ParamFloat<px4::params::MD_GT_STAT_GYR>) _param_motdet_gate_stat_gyro,
+		(ParamFloat<px4::params::MD_GT_STAT_ACC>) _param_motdet_gate_stat_accel,
+		(ParamFloat<px4::params::MD_GT_STAT_SPD>) _param_motdet_gate_stat_speed,
+		(ParamInt<px4::params::MD_STAT_CF_TIME>) _param_motdet_stat_confirmation_time,
+		(ParamFloat<px4::params::MD_GT_MOT_GYR>) _param_motdet_gate_mot_gyro,
+		(ParamFloat<px4::params::MD_GT_MOT_ACC>) _param_motdet_gate_mot_accel,
+		(ParamFloat<px4::params::MD_GT_MOT_SPD>) _param_motdet_gate_mot_speed
+	)
+
+private:
+	State _state{State::Unknown};
+	hrt_abstime _stationary_candidate_started_at{0};
+};
+
+#endif // !MOTION_DETECTOR_1234_HPP

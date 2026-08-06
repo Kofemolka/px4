@@ -71,3 +71,53 @@ parameters:
         long: Enable/disable aux global position source 0 fusion in the navputer estimator.
       type: boolean
       default: 1
+
+    MD_GT_STAT_GYR:
+      description:
+        short: Max gate for stationary Gyro
+        long: Gate which detects maximum Gyro magnitude that is considered stationary enough
+      type: float
+      default: 0.03
+      unit: rad/s
+    MD_GT_STAT_ACC:
+      description:
+        short: Max gate for stationary Acceleration
+        long: Gate which detects maximum Acceleration magnitude that is considered stationary enough
+      type: float
+      default: 0.35
+      unit: m/s^2
+    MD_GT_STAT_SPD:
+      description:
+        short: Max gate for stationary Speed
+        long: Gate which detects maximum Speed that is considered stationary enough
+      type: float
+      default: 0.3
+      unit: m/s
+    MD_STAT_CF_TIME:
+      description:
+        short: Confirmation time for stationary
+        long: Amount of time needed to confirm the stationary mode
+      type: int32
+      default: 3000000
+      unit: us
+    MD_GT_MOT_GYR:
+      description:
+        short: Min gate for moving Gyro
+        long: Gate which detects minimum Gyro magnitude that is considered as moving
+      type: float
+      default: 0.05
+      unit: rad/s
+    MD_GT_MOT_ACC:
+      description:
+        short: Min gate for moving Acceleration
+        long: Gate which detects minimum Acceleration magnitude that is considered as moving
+      type: float
+      default: 0.6
+      unit: m/s^2
+    MD_GT_MOT_SPD:
+      description:
+        short: Max gate for stationary Speed
+        long: Gate which detects minimum Speed that is considered as moving
+      type: float
+      default: 0.8
+      unit: m/s
