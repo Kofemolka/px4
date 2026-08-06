@@ -16,46 +16,30 @@ constexpr hrt_abstime kMaxBeaconAge = 1_s;
 // geometry gate
 constexpr float kMaxHdop = 5.0f;
 
-// MLAT solver (ported from lion::filters::MLAT / ArduPilot AP_NavEKF3_RngBcnFusion SolveMlat)
-constexpr int kNumSeeds = 5;
+// MLAT solver tuning (ported from lion::filters::MLAT / ArduPilot AP_NavEKF3_RngBcnFusion SolveMlat)
 constexpr float kLocalAnchorOffset = 1000.f;           // m
 constexpr float kBasinRadius2 = 50.f * 50.f;           // m^2
 constexpr float kResidualEpsilon = 10.f;               // m^2
 constexpr float kMinBeaconSeparation2 = 100.f * 100.f; // m^2
 constexpr float kMaxResidual2 = 255.f * 255.f;         // m^2
 constexpr float kLearningRate = 0.1f;
-constexpr int kMaxIterations = 30;
+constexpr int kMaxIterations = 300;
 constexpr float kTolerance = 1.0f; // m
 
 // AGP publication: matches EKF2_AGP0_ID in the 10046_navput_quadx airframe, i.e. the
 // already-enabled slot 0 (Navputer::Navputer() hardcodes _fc.agp[0].enabled = true).
 constexpr uint8_t kAgpId = 111;
 
-struct BeaconInput {
-	matrix::Vector2f pos; // local north/east, m
-	float range{0.f};     // flattened 2D ground range, m
-	float range_accuracy{0.f};
-	uint64_t timestamp_sample{0};
-};
+} // namespace
 
-struct Candidate {
-	bool valid{false};
-	matrix::Vector2f anchor;
-	matrix::Vector2f pos;
-	float residual{1e10f};
-	uint8_t votes{0};
-};
-
-float squaredNorm(const matrix::Vector2f &v)
+float MlatAux::squaredNorm(const matrix::Vector2f &v)
 {
 	return v(0) * v(0) + v(1) * v(1);
 }
 
-// counts geometrically distinct beacons: beacons closer than kMinBeaconSeparation2 to an
-// already-counted one add no independent geometry and are folded together
-int countDistinctBeacons(const BeaconInput *inputs, int num_inputs)
+int MlatAux::countDistinctBeacons(const BeaconInput *inputs, int num_inputs)
 {
-	bool counted[MlatAux::kMaxBeacons] {};
+	bool counted[kMaxBeacons] {};
 	int distinct = 0;
 
 	for (int i = 0; i < num_inputs; i++) {
@@ -76,8 +60,107 @@ int countDistinctBeacons(const BeaconInput *inputs, int num_inputs)
 	return distinct;
 }
 
-// standard 2-D HDOP from the Fisher information matrix of unit line-of-sight vectors
-bool calcHdop(const matrix::Vector2f &from, const BeaconInput *inputs, int num_inputs, float &hdop)
+bool MlatAux::computeBeaconCentroid(double &lat, double &lon)
+{
+	double lat_sum = 0.0;
+	double lon_sum = 0.0;
+	int count = 0;
+
+	for (int i = 0; i < kMaxBeacons; i++) {
+		if (_beacons[i].valid) {
+			lat_sum += _beacons[i].lat;
+			lon_sum += _beacons[i].lon;
+			count++;
+		}
+	}
+
+	if (count == 0) {
+		return false;
+	}
+
+	lat = lat_sum / count;
+	lon = lon_sum / count;
+	return true;
+}
+
+float MlatAux::bearingRad(double lat1_deg, double lon1_deg, double lat2_deg, double lon2_deg)
+{
+	const double lat1 = math::radians(lat1_deg);
+	const double lat2 = math::radians(lat2_deg);
+	const double dlon = math::radians(lon2_deg - lon1_deg);
+
+	const double y = sin(dlon) * cos(lat2);
+	const double x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dlon);
+
+	return (float)atan2(y, x);
+}
+
+float MlatAux::directionalEarthRadius(double center_lat_deg, double center_lon_deg,
+				       double target_lat_deg, double target_lon_deg)
+{
+	const double lat_rad = math::radians(center_lat_deg);
+	const double sin_lat = sin(lat_rad);
+	const double w = 1.0 - LatLonAlt::Wgs84::eccentricity2 * sin_lat * sin_lat;
+	const double n = LatLonAlt::Wgs84::equatorial_radius / sqrt(w); // prime-vertical (E-W) radius
+	const double m = LatLonAlt::Wgs84::meridian_radius_of_curvature_numerator / (w * sqrt(w)); // meridian (N-S) radius
+
+	const bool same_point = fabs(target_lat_deg - center_lat_deg) < 1e-9 && fabs(target_lon_deg - center_lon_deg) < 1e-9;
+
+	if (same_point) {
+		return (float)sqrt(m * n);
+	}
+
+	const double bearing = (double)bearingRad(center_lat_deg, center_lon_deg, target_lat_deg, target_lon_deg);
+	const double cos_b = cos(bearing);
+	const double sin_b = sin(bearing);
+
+	return (float)((m * n) / (n * cos_b * cos_b + m * sin_b * sin_b));
+}
+
+float MlatAux::distortionFactor(double lat, double lon) const
+{
+	const double ref_lat = _projection.getProjectionReferenceLat();
+	const double ref_lon = _projection.getProjectionReferenceLon();
+	const double directional_radius = (double)directionalEarthRadius(ref_lat, ref_lon, lat, lon);
+
+	return (float)(CONSTANTS_RADIUS_OF_EARTH / directional_radius);
+}
+
+bool MlatAux::selectProjectionCenter(const navput_local_position_s &local_pos, matrix::Vector2d &center_lat_lon,
+				      bool &centered_on_known_point)
+{
+	if (local_pos.xy_valid && local_pos.xy_global) {
+		MapProjection ref_projection;
+		ref_projection.initReference(local_pos.ref_lat, local_pos.ref_lon);
+
+		double lat;
+		double lon;
+		ref_projection.reproject(local_pos.x, local_pos.y, lat, lon);
+
+		center_lat_lon = matrix::Vector2d(lat, lon);
+		centered_on_known_point = true;
+		return true;
+	}
+
+	if (_has_last_solution) {
+		center_lat_lon = _last_solution_lat_lon;
+		centered_on_known_point = true;
+		return true;
+	}
+
+	double lat;
+	double lon;
+
+	if (!computeBeaconCentroid(lat, lon)) {
+		return false;
+	}
+
+	center_lat_lon = matrix::Vector2d(lat, lon);
+	centered_on_known_point = false;
+	return true;
+}
+
+bool MlatAux::calcHdop(const matrix::Vector2f &from, const BeaconInput *inputs, int num_inputs, float &hdop)
 {
 	float hxx = 0.f;
 	float hyy = 0.f;
@@ -114,7 +197,7 @@ bool calcHdop(const matrix::Vector2f &from, const BeaconInput *inputs, int num_i
 	return true;
 }
 
-void solveCandidate(Candidate &candidate, const BeaconInput *inputs, int num_inputs)
+void MlatAux::solveCandidate(Candidate &candidate, const BeaconInput *inputs, int num_inputs)
 {
 	matrix::Vector2f solution = candidate.anchor;
 	float residual = 1e10f;
@@ -167,7 +250,7 @@ void solveCandidate(Candidate &candidate, const BeaconInput *inputs, int num_inp
 	candidate.votes = 1;
 }
 
-void buildLocalAnchors(Candidate (&candidates)[kNumSeeds], const matrix::Vector2f &last_pos)
+void MlatAux::buildLocalAnchors(Candidate (&candidates)[kNumSeeds], const matrix::Vector2f &last_pos)
 {
 	candidates[0].anchor = last_pos;
 	candidates[1].anchor = last_pos + matrix::Vector2f(kLocalAnchorOffset, 0.f); // N
@@ -176,7 +259,7 @@ void buildLocalAnchors(Candidate (&candidates)[kNumSeeds], const matrix::Vector2
 	candidates[4].anchor = last_pos + matrix::Vector2f(0.f, -kLocalAnchorOffset); // W
 }
 
-void buildGlobalAnchors(Candidate (&candidates)[kNumSeeds], const BeaconInput *inputs, int num_inputs)
+void MlatAux::buildGlobalAnchors(Candidate (&candidates)[kNumSeeds], const BeaconInput *inputs, int num_inputs)
 {
 	float min_n = FLT_MAX;
 	float max_n = -FLT_MAX;
@@ -200,9 +283,7 @@ void buildGlobalAnchors(Candidate (&candidates)[kNumSeeds], const BeaconInput *i
 	candidates[4].anchor = matrix::Vector2f((min_n + max_n) * 0.5f, (min_e + max_e) * 0.5f);
 }
 
-// merges candidates that converged within kBasinRadius2 of each other, keeping the
-// lower-residual member as representative and summing votes (ported from MLAT::evaluate())
-void mergeBasins(Candidate (&candidates)[kNumSeeds])
+void MlatAux::mergeBasins(Candidate (&candidates)[kNumSeeds])
 {
 	for (int i = 0; i < kNumSeeds; i++) {
 		if (!candidates[i].valid) {
@@ -229,9 +310,8 @@ void mergeBasins(Candidate (&candidates)[kNumSeeds])
 	}
 }
 
-// picks the accepted solution among the merged basins, rejecting ambiguous cold-start fixes
-bool evaluate(Candidate (&candidates)[kNumSeeds], bool have_last_pos, const matrix::Vector2f &last_pos,
-	      matrix::Vector2f &result)
+bool MlatAux::evaluate(Candidate (&candidates)[kNumSeeds], bool have_last_pos, const matrix::Vector2f &last_pos,
+			matrix::Vector2f &result)
 {
 	mergeBasins(candidates);
 
@@ -279,8 +359,6 @@ bool evaluate(Candidate (&candidates)[kNumSeeds], bool have_last_pos, const matr
 	result = candidates[best].pos;
 	return true;
 }
-
-} // namespace
 
 void MlatAux::updateBeaconStore()
 {
@@ -330,17 +408,18 @@ bool MlatAux::solve()
 		return false;
 	}
 
-	if (!_projection.isInitialized()) {
-		if (local_pos.xy_global) {
-			_projection.initReference(local_pos.ref_lat, local_pos.ref_lon, local_pos.ref_timestamp);
+	matrix::Vector2d center_lat_lon;
+	bool have_last_pos = false;
 
-		} else {
-			return false;
-		}
+	if (!selectProjectionCenter(local_pos, center_lat_lon, have_last_pos)) {
+		return false; // no beacons seen yet, nothing to center the projection on
 	}
 
-	const bool have_last_pos = local_pos.xy_valid;
-	const matrix::Vector2f last_pos(local_pos.x, local_pos.y);
+	// re-centered every cycle (matching lion::BeaconsSource::update_projection()) so that
+	// distortionFactor() stays an accurate proxy for the true vehicle-to-beacon geometry
+	_projection.initReference(center_lat_lon(0), center_lat_lon(1), hrt_absolute_time());
+
+	const matrix::Vector2f last_pos(0.f, 0.f); // _projection is centered exactly on last_pos this cycle
 	const bool have_own_alt = local_pos.z_global;
 	const float own_alt = local_pos.ref_alt - local_pos.z;
 
@@ -372,6 +451,9 @@ bool MlatAux::solve()
 				range = sqrtf(beacon.range * beacon.range - dz * dz);
 			}
 		}
+
+		const float distortion = distortionFactor(beacon.lat, beacon.lon);
+		range *= distortion;
 
 		input.range = range;
 		input.range_accuracy = beacon.range_accuracy;
@@ -429,6 +511,9 @@ bool MlatAux::solve()
 	double lat;
 	double lon;
 	_projection.reproject(solution(0), solution(1), lat, lon);
+
+	_has_last_solution = true;
+	_last_solution_lat_lon = matrix::Vector2d(lat, lon);
 
 	aux_global_position_s agp{};
 	agp.timestamp_sample = latest_timestamp_sample;

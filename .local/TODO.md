@@ -41,8 +41,10 @@ cd /home/ayakuba/src/poc/px4/build/px4_sitl_sih/src/modules/simulation/simulator
 	```
 	./sitl_navput.bash: line 18: 304632 Segmentation fault      (core dumped) PX4_SIM_MODEL=navput_quadx PX4_SIMULATOR=sihsim ../bin/px
 	```
-* [ ] Check/add logic to set global origin from Aux source.
+* [x] Check/add logic to set global origin from Aux source.
+      Yes, if AGP fusion is enabled, the AGP source will perform ekf.resetHorizontalPositionTo().
 * [ ] Where does heading error between Navput and EK2 come from? It revolves counter-clock-wise always.
-* [ ] Annoying timing exceptions during start when launching under debugger.
+* [x] Annoying timing exceptions during start when launching under debugger.
 * [ ] Figure out how to publish to custom topic, but reuse existing messages.
 * [x] Expose params to control fusion
+* [x] Fix beacon range distortion in the MLAT and the resulting solution bias.

@@ -57,7 +57,7 @@ Navputer::Navputer(const px4::wq_config_t &config, bool replay_mode):
 
 	SyncFusionControlFlags();
 
-	// TODO: temp solution, should be provided externally or from Aux aid src
+	// TODO: temp solution. AUX can set origin if AGP fusion is enabled
 	_ekf.resetGlobalPositionTo(49.796766, 24.347826, 270);
 }
 
