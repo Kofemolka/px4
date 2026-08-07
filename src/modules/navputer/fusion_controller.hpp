@@ -20,7 +20,8 @@ private:
 
 	parameters *_params;
 
-	hrt_abstime _agp_enabled_time{0};
+	hrt_abstime _agp_last_origin_missing{0};
+	hrt_abstime _agp_last_other_source_missing{0};
 
 	DEFINE_PARAMETERS(
 		// per-source fusion enable
