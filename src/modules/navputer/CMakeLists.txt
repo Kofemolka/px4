@@ -49,6 +49,8 @@ set(NAVPUTER_SRCS
 	motion_detector.cpp
 	copilot_lifecycle.hpp
 	copilot_lifecycle.cpp
+	fusion_controller.hpp
+	fusion_controller.cpp
 )
 
 px4_add_module(
