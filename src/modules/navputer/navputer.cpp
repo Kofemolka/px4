@@ -89,7 +89,10 @@ void Navputer::UpdateMotionDetector(const imuSample& imu_sample)
 	_motion_detector.update(imu_sample);
 	const bool motion_state_changed = _motion_detector.state() != previous_motion_state;
 
-	if (_system_flags_initialized && motion_state_changed) {
+	_copilot_lifecycle.update(_motion_detector.state());
+
+	if (motion_state_changed && _system_flags_initialized)
+	{
 		UpdateSystemFlags(imu_sample.time_us);
 	}
 }

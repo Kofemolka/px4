@@ -32,49 +32,37 @@
  ****************************************************************************/
 
 /**
- * @file motion_detector.hpp
- * Implementation of the motion detector.
+ * @file copilot_lifecycle.hpp
+ * Implementation of the global state controller.
  *
  * @author
  */
 
-#include "EKF/common.h"
+#ifndef COPILOT_LIFECYCLE_1234_HPP
+#define COPILOT_LIFECYCLE_1234_HPP
+
+#include "motion_detector.hpp"
+
+#include <uORB/Publication.hpp>
+#include <uORB/Subscription.hpp>
+#include <uORB/topics/vehicle_command.h>
+#include <uORB/topics/vehicle_status.h>
 #include <drivers/drv_hrt.h>
-#include <px4_platform_common/module_params.h>
 
-#include <matrix/Vector3.hpp>
-
-#ifndef MOTION_DETECTOR_1234_HPP
-#define MOTION_DETECTOR_1234_HPP
-
-class MotionDetector : public ModuleParams
+class CopilotLifecycle
 {
 public:
-	enum class State
-	{
-		LandedStationary,
-		AirborneMoving,
-	};
-public:
-	explicit MotionDetector(ModuleParams *parent);
-
-	void update(const estimator::imuSample& input);
-	State state() const;
-
+	void update(MotionDetector::State state);
 private:
-	bool is_imu_valid(const estimator::imuSample& input) const;
-
+	void publishArmCommand();
 private:
-	DEFINE_PARAMETERS(
-		// gates for MotionDetector
-		(ParamFloat<px4::params::NPT_MD_MOT_GYR>) _param_motion_gyro,
-		(ParamFloat<px4::params::NPT_MD_MOT_ACC>) _param_motion_accel,
-		(ParamInt<px4::params::NPT_MD_CF_TIME>) _param_motion_confirmation_time_ms
-	)
+	// Subscriptions
+	uORB::Subscription _vehicle_status_sub { ORB_ID(vehicle_status) };
+	// Publications
+	uORB::Publication<vehicle_command_s> _vehicle_command_pub { ORB_ID(vehicle_command) };
 
-private:
-	State _state{State::LandedStationary};
-	hrt_abstime _motion_candidate_started_at{0};
+	bool _armed { false };
+	hrt_abstime _last_arm_request{0};
 };
 
-#endif // !MOTION_DETECTOR_1234_HPP
+#endif // !COPILOT_LIFECYCLE_1234_HPP

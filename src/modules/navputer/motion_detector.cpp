@@ -33,7 +33,7 @@
 
 /**
  * @file motion_detector.cpp
- * Implementation of the attitude and position estimator.
+ * Implementation of the motion detector.
  *
  * @author
  */
@@ -41,6 +41,7 @@
 #include "motion_detector.hpp"
 
 #include <lib/geo/geo.h>
+#include <px4_platform_common/log.h>
 
 #include <cmath>
 
@@ -92,7 +93,12 @@ void MotionDetector::update(const estimator::imuSample& input)
 		}
 		else if (input.time_us >= _motion_candidate_started_at + confirmation_time_us)
 		{
+			const State previous_state = _state;
 			_state = State::AirborneMoving;
+
+			PX4_INFO("state changed: %s -> %s",
+				 previous_state == State::LandedStationary ? "LandedStationary" : "AirborneMoving",
+				 _state == State::LandedStationary ? "LandedStationary" : "AirborneMoving");
 		}
 	}
 	else

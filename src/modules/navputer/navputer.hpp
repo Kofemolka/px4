@@ -97,6 +97,7 @@
 #include <uORB/topics/navput_aid_source1d.h>
 
 #include "motion_detector.hpp"
+#include "copilot_lifecycle.hpp"
 
 #include "mlat_aux.hpp"
 
@@ -233,6 +234,7 @@ private:
 	bool _system_flags_initialized{false};
 
 	MotionDetector _motion_detector;
+	CopilotLifecycle _copilot_lifecycle;
 
 	MlatAux _mlat_aux;
 

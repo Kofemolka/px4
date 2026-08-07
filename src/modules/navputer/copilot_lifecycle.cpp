@@ -32,49 +32,62 @@
  ****************************************************************************/
 
 /**
- * @file motion_detector.hpp
- * Implementation of the motion detector.
+ * @file copilot_lifecycle.cpp
+ * Implementation of the global state controller.
  *
  * @author
  */
 
-#include "EKF/common.h"
-#include <drivers/drv_hrt.h>
-#include <px4_platform_common/module_params.h>
+#include "copilot_lifecycle.hpp"
 
-#include <matrix/Vector3.hpp>
+#include <px4_platform_common/log.h>
 
-#ifndef MOTION_DETECTOR_1234_HPP
-#define MOTION_DETECTOR_1234_HPP
+namespace {
+using namespace time_literals;
+constexpr float kForceArmParam = 21196.f;
+constexpr uint8_t kBroadcastTarget = 0;
+constexpr uint8_t kSourceSystem = 1;
+constexpr uint16_t kSourceComponent = 1;
+constexpr hrt_abstime kArmRequestInterval{500_ms};
+} // namespace
 
-class MotionDetector : public ModuleParams
+void CopilotLifecycle::update(MotionDetector::State state)
 {
-public:
-	enum class State
+	vehicle_status_s vehicle_status;
+	if (_vehicle_status_sub.update(&vehicle_status))
 	{
-		LandedStationary,
-		AirborneMoving,
-	};
-public:
-	explicit MotionDetector(ModuleParams *parent);
+		_armed = vehicle_status.arming_state == vehicle_status_s::ARMING_STATE_ARMED;
+	}
 
-	void update(const estimator::imuSample& input);
-	State state() const;
+	if (state == MotionDetector::State::AirborneMoving
+		&& !_armed
+		&& hrt_elapsed_time(&_last_arm_request) >= kArmRequestInterval)
+	{
+		publishArmCommand();
+	}
+}
 
-private:
-	bool is_imu_valid(const estimator::imuSample& input) const;
+void CopilotLifecycle::publishArmCommand()
+{
+	vehicle_command_s command{};
+	command.timestamp = hrt_absolute_time();
 
-private:
-	DEFINE_PARAMETERS(
-		// gates for MotionDetector
-		(ParamFloat<px4::params::NPT_MD_MOT_GYR>) _param_motion_gyro,
-		(ParamFloat<px4::params::NPT_MD_MOT_ACC>) _param_motion_accel,
-		(ParamInt<px4::params::NPT_MD_CF_TIME>) _param_motion_confirmation_time_ms
-	)
+	command.command = vehicle_command_s::VEHICLE_CMD_COMPONENT_ARM_DISARM;
+	command.param1 = static_cast<float>(vehicle_command_s::ARMING_ACTION_ARM);
+	command.param2 = kForceArmParam;
+	command.target_system = kBroadcastTarget;
+	command.target_component = kBroadcastTarget;
+	command.source_system = kSourceSystem;
+	command.source_component = kSourceComponent;
+	command.from_external = false;
 
-private:
-	State _state{State::LandedStationary};
-	hrt_abstime _motion_candidate_started_at{0};
-};
-
-#endif // !MOTION_DETECTOR_1234_HPP
+	if (_vehicle_command_pub.publish(command))
+	{
+		_last_arm_request = command.timestamp;
+		PX4_INFO("published copilot arm command");
+	}
+	else
+	{
+		PX4_WARN("failed to publish copilot arm command");
+	}
+}

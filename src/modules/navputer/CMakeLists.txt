@@ -47,6 +47,8 @@ set(NAVPUTER_SRCS
 	mlat_aux.hpp
 	motion_detector.hpp
 	motion_detector.cpp
+	copilot_lifecycle.hpp
+	copilot_lifecycle.cpp
 )
 
 px4_add_module(
