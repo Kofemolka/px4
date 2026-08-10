@@ -15,6 +15,7 @@ void FusionController::updateParams()
 	_fc.baro.enabled = _param_npt_fuse_baro.get();
 	_fc.mag.enabled = _param_npt_fuse_mag.get();
 	_fc.rngbcn.enabled = _param_npt_fuse_rngbc.get();
+	_fc.of.enabled = _param_npt_fuse_of.get();
 }
 
 void FusionController::update(Ekf &ekf)

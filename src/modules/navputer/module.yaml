@@ -17,6 +17,7 @@ parameters:
         0: Disable ranging beacon fusion
         1: Enable ranging beacon fusion
       default: 1
+
     NPT_RNGBC_DELAY:
       description:
         short: Ranging beacon measurement delay relative to IMU measurements
@@ -47,6 +48,16 @@ parameters:
       unit: m
       decimal: 1
 
+    NPT_OF_CTRL:
+      description:
+        short: Optical flow fusion control
+        long: Enable/disable optical flow fusion.
+      type: enum
+      values:
+        0: Disable optical flow fusion
+        1: Enable optical flow fusion
+      default: 1
+
     NPT_FUSE_BARO:
       description:
         short: Barometer fusion enable
@@ -69,6 +80,12 @@ parameters:
       description:
         short: Aux global position 0 fusion enable
         long: Enable/disable aux global position source 0 fusion in the navputer estimator.
+      type: boolean
+      default: 1
+    NPT_FUSE_OF:
+      description:
+        short: Optical flow fusion enable
+        long: Enable/disable optical flow fusion in the navputer estimator.
       type: boolean
       default: 1
 

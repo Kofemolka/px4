@@ -29,6 +29,7 @@ private:
 		(ParamBool<px4::params::NPT_FUSE_MAG>) _param_npt_fuse_mag,
 		(ParamBool<px4::params::NPT_FUSE_RNGBC>) _param_npt_fuse_rngbc,
 		(ParamBool<px4::params::NPT_FUSE_AGP0>) _param_npt_fuse_agp0,
+		(ParamBool<px4::params::NPT_FUSE_OF>) _param_npt_fuse_of,
 		(ParamFloat<px4::params::NPT_FC_AGP_LATCH>) _param_npt_fc_agp_latch
 	)
 };

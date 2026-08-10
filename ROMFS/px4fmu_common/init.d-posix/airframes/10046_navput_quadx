@@ -64,15 +64,24 @@ param set-default SIH_LOC_LON0 24.347826
 # Navputer HW setup
 param set-default NPT_RNGBC_CTRL 1
 param set-default NPT_RNGBC_NOISE 75
+param set-defatul NPT_OF_CTRL 1
 
 # Enable fusion of all NAVPUT sensors
 param set-default NPT_FUSE_BARO 1
 param set-default NPT_FUSE_MAG 1
 param set-default NPT_FUSE_RNGBC 1
 param set-default NPT_FUSE_AGP0 1
+param set-default NPT_FUSE_OF 1
+
 param set-default NPT_FC_AGP_LATCH 5.0
 
 # Disable the battery/throttle magnetometer compensation
 param set-default CAL_MAG_COMP_TYP 0
+
+# Opt Flow
+param set-default EKF2_OF_CTRL 1
+param set-default EKF2_OF_N_MIN 0
+param set-default EKF2_OF_N_MAX 1000
+param set-default EKF2_OF_QMIN 0
 
 navputer start

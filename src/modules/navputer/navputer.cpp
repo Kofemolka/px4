@@ -51,7 +51,8 @@ Navputer::Navputer(const px4::wq_config_t &config, bool replay_mode):
 	_param_npt_rngbc_ctrl(_params->ekf2_rngbc_ctrl),
 	_param_npt_rngbc_delay(_params->ekf2_rngbc_delay),
 	_param_npt_rngbc_noise(_params->ekf2_rngbc_noise),
-	_param_npt_rngbc_gate(_params->ekf2_rngbc_gate)
+	_param_npt_rngbc_gate(_params->ekf2_rngbc_gate),
+	_param_npt_of_ctrl(_params->ekf2_of_ctrl)
 {
 	AdvertiseTopics();
 }
@@ -234,6 +235,7 @@ void Navputer::Run()
 		UpdateBaroSample(ekf2_timestamps);
 		UpdateMagSample(ekf2_timestamps);
 		UpdateRangingBeaconSample(ekf2_timestamps);
+		UpdateFlowSample(ekf2_timestamps);
 
 		_fusion_controller.update(_ekf);
 
@@ -658,6 +660,76 @@ void Navputer::UpdateRangingBeaconSample(ekf2_timestamps_s &ekf2_timestamps)
 
 		_ekf.setRangingBeaconData(sample);
 	}
+}
+
+bool Navputer::UpdateFlowSample(ekf2_timestamps_s &ekf2_timestamps)
+{
+	// EKF flow sample
+	bool new_optical_flow = false;
+	vehicle_optical_flow_s optical_flow;
+
+	if (_vehicle_optical_flow_sub.update(&optical_flow)) {
+
+		const float dt = 1e-6f * (float)optical_flow.integration_timespan_us;
+		Vector2f flow_rate;
+		Vector3f gyro_rate;
+
+		if (dt > FLT_EPSILON) {
+			// NOTE: the EKF uses the reverse sign convention to the flow sensor. EKF assumes positive LOS rate
+			// is produced by a RH rotation of the image about the sensor axis.
+			flow_rate = Vector2f(-optical_flow.pixel_flow[0], -optical_flow.pixel_flow[1]) / dt;
+			gyro_rate = Vector3f(-optical_flow.delta_angle[0], -optical_flow.delta_angle[1], -optical_flow.delta_angle[2]) / dt;
+
+		} else if (optical_flow.quality == 0) {
+			// handle special case of SITL and PX4Flow where dt is forced to zero when the quaity is 0
+			flow_rate.zero();
+			gyro_rate.zero();
+		}
+
+		flowSample flow {
+			.time_us = optical_flow.timestamp_sample - optical_flow.integration_timespan_us / 2, // correct timestamp to midpoint of integration interval as the data is converted to rates
+			.flow_rate = flow_rate,
+			.gyro_rate = gyro_rate,
+			.quality = optical_flow.quality
+		};
+
+		if (Vector2f(optical_flow.pixel_flow).isAllFinite() && optical_flow.integration_timespan_us < 1e6) {
+
+			// Save sensor limits reported by the optical flow sensor
+			_ekf.set_optical_flow_limits(optical_flow.max_flow_rate, optical_flow.min_ground_distance,
+						     optical_flow.max_ground_distance);
+
+			_ekf.setOpticalFlowData(flow);
+
+			new_optical_flow = true;
+		}
+
+// TODO: review later if we should have rangefinder
+// #if defined(CONFIG_EKF2_RANGE_FINDER)
+
+// 		// use optical_flow distance as range sample if distance_sensor unavailable
+// 		if (PX4_ISFINITE(optical_flow.distance_m) && (ekf2_timestamps.timestamp > _last_range_sensor_update + 1_s)) {
+
+// 			int8_t quality = static_cast<float>(optical_flow.quality) / static_cast<float>(UINT8_MAX) * 100.f;
+
+// 			estimator::sensor::rangeSample range_sample {
+// 				.time_us = optical_flow.timestamp_sample,
+// 				.rng = optical_flow.distance_m,
+// 				.quality = quality,
+// 			};
+// 			_ekf.setRangeData(range_sample);
+
+// 			// set sensor limits
+// 			_ekf.set_rangefinder_limits(optical_flow.min_ground_distance, optical_flow.max_ground_distance);
+// 		}
+
+// #endif // CONFIG_EKF2_RANGE_FINDER
+
+		ekf2_timestamps.optical_flow_timestamp_rel = (int16_t)((int64_t)optical_flow.timestamp / 100 -
+				(int64_t)ekf2_timestamps.timestamp / 100);
+	}
+
+	return new_optical_flow;
 }
 
 void Navputer::UpdateCalibration(const hrt_abstime &timestamp, InFlightCalibration &cal, const matrix::Vector3f &bias,

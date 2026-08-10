@@ -89,6 +89,7 @@
 #include <uORB/topics/vehicle_air_data.h>
 #include <uORB/topics/vehicle_magnetometer.h>
 #include <uORB/topics/ranging_beacon.h>
+#include <uORB/topics/vehicle_optical_flow.h>
 
 #include <uORB/topics/navput_attitude.h>
 #include <uORB/topics/navput_local_position.h>
@@ -175,6 +176,7 @@ private:
 	void UpdateMagSample(ekf2_timestamps_s &ekf2_timestamps);
 	void UpdateBaroSample(ekf2_timestamps_s &ekf2_timestamps);
 	void UpdateRangingBeaconSample(ekf2_timestamps_s &ekf2_timestamps);
+	bool UpdateFlowSample(ekf2_timestamps_s &ekf2_timestamps);
 
 	void UpdateCalibration(const hrt_abstime &timestamp, InFlightCalibration &cal, const matrix::Vector3f &bias,
 			       const matrix::Vector3f &bias_variance, float bias_limit, bool bias_valid, bool learning_valid);
@@ -213,6 +215,9 @@ private:
 	// Beacons
 	uORB::Subscription _ranging_beacon_sub {ORB_ID(ranging_beacon)};
 
+	// Optical Flow
+	uORB::Subscription _vehicle_optical_flow_sub {ORB_ID(vehicle_optical_flow)};
+
 	uORB::Publication<navput_attitude_s>           		_attitude_pub{ORB_ID(navput_attitude)};
 	uORB::Publication<navput_local_position_s>     		_local_position_pub{ORB_ID(navput_local_position)};
 
@@ -248,7 +253,10 @@ private:
 		(ParamExtInt<px4::params::NPT_RNGBC_CTRL>) _param_npt_rngbc_ctrl,
 		(ParamExtFloat<px4::params::NPT_RNGBC_DELAY>) _param_npt_rngbc_delay,
 		(ParamExtFloat<px4::params::NPT_RNGBC_NOISE>) _param_npt_rngbc_noise,
-		(ParamExtFloat<px4::params::NPT_RNGBC_GATE>) _param_npt_rngbc_gate
+		(ParamExtFloat<px4::params::NPT_RNGBC_GATE>) _param_npt_rngbc_gate,
+
+		// optical flow fusion
+		(ParamExtInt<px4::params::NPT_OF_CTRL>) _param_npt_of_ctrl
 	)
 };
 #endif // !NAVPUTER_HPP
