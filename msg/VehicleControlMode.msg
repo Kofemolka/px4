@@ -15,3 +15,5 @@ bool flag_control_climb_rate_enabled		# true if climb rate is controlled
 bool flag_control_attitude_enabled		# true if attitude stabilization is mixed in
 bool flag_control_rates_enabled			# true if rates are stabilized
 bool flag_control_allocation_enabled		# true if control allocation is enabled
+
+# TOPICS vehicle_control_mode navput_vehicle_control_mode

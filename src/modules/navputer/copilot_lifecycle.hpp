@@ -45,8 +45,8 @@
 
 #include <uORB/Publication.hpp>
 #include <uORB/Subscription.hpp>
-#include <uORB/topics/vehicle_command.h>
 #include <uORB/topics/vehicle_status.h>
+#include <uORB/topics/vehicle_control_mode.h>
 #include <drivers/drv_hrt.h>
 
 class CopilotLifecycle
@@ -54,15 +54,21 @@ class CopilotLifecycle
 public:
 	void update(MotionDetector::State state);
 private:
-	void publishArmCommand();
+	bool isArmed() const;
+	void publishVehicleStatus(hrt_abstime timestamp);
+	void publishVehicleControlMode(hrt_abstime timestamp);
+
 private:
 	// Subscriptions
 	uORB::Subscription _vehicle_status_sub { ORB_ID(vehicle_status) };
+	uORB::Subscription _vehicle_control_mode_sub { ORB_ID(vehicle_control_mode) };
 	// Publications
-	uORB::Publication<vehicle_command_s> _vehicle_command_pub { ORB_ID(vehicle_command) };
+	uORB::Publication<vehicle_status_s> _navput_vehicle_status_pub { ORB_ID(navput_vehicle_status) };
+	uORB::Publication<vehicle_control_mode_s> _navput_vehicle_control_mode_pub { ORB_ID(navput_vehicle_control_mode) };
 
-	bool _armed { false };
-	hrt_abstime _last_arm_request{0};
+	MotionDetector::State _state{MotionDetector::State::LandedStationary};
+	vehicle_status_s _vehicle_status{};
+	vehicle_control_mode_s _vehicle_control_mode{};
 };
 
 #endif // !COPILOT_LIFECYCLE_1234_HPP

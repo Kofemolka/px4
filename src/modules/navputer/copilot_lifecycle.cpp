@@ -42,52 +42,67 @@
 
 #include <px4_platform_common/log.h>
 
-namespace {
-using namespace time_literals;
-constexpr float kForceArmParam = 21196.f;
-constexpr uint8_t kBroadcastTarget = 0;
-constexpr uint8_t kSourceSystem = 1;
-constexpr uint16_t kSourceComponent = 1;
-constexpr hrt_abstime kArmRequestInterval{500_ms};
-} // namespace
-
 void CopilotLifecycle::update(MotionDetector::State state)
 {
 	vehicle_status_s vehicle_status;
-	if (_vehicle_status_sub.update(&vehicle_status))
+	const bool vehicle_status_updated = _vehicle_status_sub.update(&vehicle_status);
+	if (vehicle_status_updated)
 	{
-		_armed = vehicle_status.arming_state == vehicle_status_s::ARMING_STATE_ARMED;
+		_vehicle_status = vehicle_status;
 	}
 
-	if (state == MotionDetector::State::AirborneMoving
-		&& !_armed
-		&& hrt_elapsed_time(&_last_arm_request) >= kArmRequestInterval)
+	vehicle_control_mode_s vehicle_control_mode;
+	const bool vehicle_control_mode_updated = _vehicle_control_mode_sub.update(&vehicle_control_mode);
+	if (vehicle_control_mode_updated)
 	{
-		publishArmCommand();
+		_vehicle_control_mode = vehicle_control_mode;
+	}
+
+	const bool state_changed = state != _state;
+
+	if (state_changed)
+	{
+		_state = state;
+		PX4_INFO("copilot calibration lifecycle armed: %s", isArmed() ? "true" : "false");
+	}
+
+	if (state_changed || vehicle_status_updated || vehicle_control_mode_updated)
+	{
+		auto timestamp = hrt_absolute_time();
+		publishVehicleStatus(timestamp);
+		publishVehicleControlMode(timestamp);
 	}
 }
 
-void CopilotLifecycle::publishArmCommand()
+bool CopilotLifecycle::isArmed() const
 {
-	vehicle_command_s command{};
-	command.timestamp = hrt_absolute_time();
+	return _state == MotionDetector::State::AirborneMoving
+	       || _vehicle_status.arming_state == vehicle_status_s::ARMING_STATE_ARMED
+	       || _vehicle_control_mode.flag_armed;
+}
 
-	command.command = vehicle_command_s::VEHICLE_CMD_COMPONENT_ARM_DISARM;
-	command.param1 = static_cast<float>(vehicle_command_s::ARMING_ACTION_ARM);
-	command.param2 = kForceArmParam;
-	command.target_system = kBroadcastTarget;
-	command.target_component = kBroadcastTarget;
-	command.source_system = kSourceSystem;
-	command.source_component = kSourceComponent;
-	command.from_external = false;
+void CopilotLifecycle::publishVehicleStatus(hrt_abstime timestamp)
+{
+	vehicle_status_s navput_vehicle_status{_vehicle_status};
+	navput_vehicle_status.timestamp = timestamp;
+	navput_vehicle_status.arming_state = isArmed()
+			? vehicle_status_s::ARMING_STATE_ARMED
+			: vehicle_status_s::ARMING_STATE_DISARMED;
 
-	if (_vehicle_command_pub.publish(command))
+	if (!_navput_vehicle_status_pub.publish(navput_vehicle_status))
 	{
-		_last_arm_request = command.timestamp;
-		PX4_INFO("published copilot arm command");
+		PX4_WARN("failed to publish navput_vehicle_status");
 	}
-	else
+}
+
+void CopilotLifecycle::publishVehicleControlMode(hrt_abstime timestamp)
+{
+	vehicle_control_mode_s navput_vehicle_control_mode{_vehicle_control_mode};
+	navput_vehicle_control_mode.timestamp = timestamp;
+	navput_vehicle_control_mode.flag_armed = isArmed();
+
+	if (!_navput_vehicle_control_mode_pub.publish(navput_vehicle_control_mode))
 	{
-		PX4_WARN("failed to publish copilot arm command");
+		PX4_WARN("failed to publish navput_vehicle_control_mode");
 	}
 }

@@ -3,3 +3,10 @@ menuconfig MODULES_NAVPUTER
 	default n
 	---help---
 		Enable support for navputer
+config NAVPUT_CALIBRATION_LIFECYCLE
+	bool "Use Navputer lifecycle for sensor calibration"
+	depends on MODULES_NAVPUTER
+	default n
+	---help---
+		Make shared sensor calibration modules subscribe to
+		Navputer-adjusted vehicle lifecycle topics.
