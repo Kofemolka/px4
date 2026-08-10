@@ -83,6 +83,7 @@
 #include <uORB/topics/vehicle_attitude.h>
 #include <uORB/topics/vehicle_global_position.h>
 #include <uORB/topics/vehicle_local_position.h>
+#include <uORB/topics/vehicle_optical_flow.h>
 #include <uORB/topics/ranging_beacon.h>
 
 #if defined(ENABLE_LOCKSTEP_SCHEDULER)
@@ -136,6 +137,7 @@ private:
 	uORB::Publication<airspeed_s>         _airspeed_pub{ORB_ID(airspeed)};
 	uORB::Publication<ranging_beacon_s>   _ranging_beacon_pub{ORB_ID(ranging_beacon)};
 	uORB::Publication<esc_status_s>       _esc_status_pub{ORB_ID(esc_status)};
+	uORB::Publication<vehicle_optical_flow_s> _vehicle_optical_flow_pub{ORB_ID(vehicle_optical_flow)};
 
 	// groundtruth
 	uORB::Publication<vehicle_angular_velocity_s> _angular_velocity_ground_truth_pub{ORB_ID(vehicle_angular_velocity_groundtruth)};
@@ -204,6 +206,7 @@ private:
 	void send_airspeed(const hrt_abstime &time_now_us);
 	void send_dist_snsr(const hrt_abstime &time_now_us);
 	void send_ranging_beacon(const hrt_abstime &time_now_us);
+	void send_optical_flow(const hrt_abstime &time_now_us);
 	void publish_ground_truth(const hrt_abstime &time_now_us);
 	void generate_fw_aerodynamics(const float roll_cmd, const float pitch_cmd, const float yaw_cmd, const float thrust_for_prowash);
 	void generate_ts_aerodynamics();
@@ -231,6 +234,7 @@ private:
 	hrt_abstime _airspeed_time{0};
 	hrt_abstime _dist_snsr_time{0};
 	hrt_abstime _ranging_beacon_time{0};
+	hrt_abstime _optical_flow_time{0};
 	uint8_t _ranging_beacon_idx{0};
 
 	bool _grounded{true}; // whether the vehicle is on the ground

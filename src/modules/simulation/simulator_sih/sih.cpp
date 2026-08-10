@@ -272,6 +272,11 @@ void Sih::sensor_step()
 		send_ranging_beacon(now);
 	}
 
+	// optical flow published at 50 Hz
+	if (now - _optical_flow_time >= 20_ms) {
+		send_optical_flow(now);
+	}
+
 	publish_ground_truth(now);
 
 	perf_end(_loop_perf);
@@ -850,6 +855,58 @@ void Sih::send_ranging_beacon(const hrt_abstime &time_now_us)
 		// cycle through the beacons regardless of whether this one was in range
 		_ranging_beacon_idx = (_ranging_beacon_idx + 1) % NUM_RANGING_BEACONS;
 	}
+}
+
+void Sih::send_optical_flow(const hrt_abstime &time_now_us)
+{
+	const float dt = (_optical_flow_time > 0) ? (time_now_us - _optical_flow_time) * 1e-6f : 0.f;
+	_optical_flow_time = time_now_us;
+
+	vehicle_optical_flow_s optical_flow{};
+	optical_flow.timestamp_sample = time_now_us;
+	optical_flow.device_id = 1;
+	optical_flow.integration_timespan_us = static_cast<uint32_t>(dt * 1e6f);
+	optical_flow.min_ground_distance = 0.1f;
+	optical_flow.max_ground_distance = 30.f;
+	optical_flow.max_flow_rate = 5.f; // rad/s, typical of a PX4Flow-class sensor
+
+	// distance from the sensor to the ground along the (downward-facing) boresight,
+	// assuming flat ground at z=0, same convention as send_dist_snsr()
+	const float cos_tilt = _q.dcm_z()(2);
+	const float hagl = -_lpos(2);
+	const float distance = hagl / cos_tilt;
+
+	if (dt > FLT_EPSILON
+	    && cos_tilt > 0.01f
+	    && distance > optical_flow.min_ground_distance
+	    && distance < optical_flow.max_ground_distance) {
+
+		// ground-relative velocity in body frame (flow sensor assumed co-located with the IMU)
+		const Vector3f vel_body = _q.rotateVectorInverse(_v_N);
+
+		// translational contribution to the LOS rate, same convention/formula as Ekf::predictFlow()
+		const Vector2f flow_compensated(vel_body(1) / distance, -vel_body(0) / distance);
+
+		// raw (uncompensated) LOS rate a physical sensor would see: translation plus body rotation
+		const Vector2f flow_rate = flow_compensated - _w_B.xy();
+
+		// PX4 optical flow convention: pixel_flow/delta_angle use the opposite sign to the LOS/body rate
+		optical_flow.pixel_flow[0] = -flow_rate(0) * dt;
+		optical_flow.pixel_flow[1] = -flow_rate(1) * dt;
+		optical_flow.delta_angle[0] = _w_B(0) * dt;
+		optical_flow.delta_angle[1] = _w_B(1) * dt;
+		optical_flow.delta_angle[2] = _w_B(2) * dt;
+		optical_flow.distance_m = distance;
+		optical_flow.quality = 255;
+
+	} else {
+		// out of range or first sample: report zero flow at the lowest quality
+		optical_flow.distance_m = NAN;
+		optical_flow.quality = 0;
+	}
+
+	optical_flow.timestamp = hrt_absolute_time();
+	_vehicle_optical_flow_pub.publish(optical_flow);
 }
 
 void Sih::publish_ground_truth(const hrt_abstime &time_now_us)
