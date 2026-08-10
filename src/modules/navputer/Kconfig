@@ -3,3 +3,12 @@ menuconfig MODULES_NAVPUTER
 	default n
 	---help---
 		Enable support for navputer
+
+config NAVPUT_BUILD
+	bool "navput build customizations"
+	depends on MODULES_NAVPUTER
+	default y
+	---help---
+		Enable navput-specific customizations in other modules (e.g.
+		sensors/vehicle_imu subscribing to navput_control_mode instead of
+		vehicle_control_mode).

@@ -93,7 +93,11 @@ private:
 	static constexpr float sq(float var) { return var * var; }
 
 	uORB::SubscriptionInterval _parameter_update_sub{ORB_ID(parameter_update), 1_s};
-	uORB::Subscription _vehicle_status_sub{ORB_ID::vehicle_status};
+#ifdef CONFIG_NAVPUT_BUILD
+	uORB::Subscription _vehicle_status_sub{ORB_ID(navput_vehicle_status)};
+#else
+	uORB::Subscription _vehicle_status_sub{ORB_ID(vehicle_status)};
+#endif
 
 	uORB::SubscriptionMultiArray<sensor_accel_s, MAX_SENSORS> _sensor_accel_subs{ORB_ID::sensor_accel};
 	uORB::SubscriptionMultiArray<sensor_gyro_s, MAX_SENSORS>  _sensor_gyro_subs{ORB_ID::sensor_gyro};
