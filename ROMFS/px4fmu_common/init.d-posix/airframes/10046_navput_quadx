@@ -72,4 +72,7 @@ param set-default NPT_FUSE_RNGBC 1
 param set-default NPT_FUSE_AGP0 1
 param set-default NPT_FC_AGP_LATCH 5.0
 
+# Disable the battery/throttle magnetometer compensation
+param set-default CAL_MAG_COMP_TYP 0
+
 navputer start

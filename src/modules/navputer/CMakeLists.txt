@@ -47,6 +47,8 @@ set(NAVPUTER_SRCS
 	mlat_aux.hpp
 	motion_detector.hpp
 	motion_detector.cpp
+	copilot_lifecycle.hpp
+	copilot_lifecycle.cpp
 	fusion_controller.hpp
 	fusion_controller.cpp
 )

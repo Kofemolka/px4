@@ -113,7 +113,11 @@ private:
 	uORB::Subscription _vehicle_thrust_setpoint_0_sub{ORB_ID(vehicle_thrust_setpoint), 0};
 	uORB::Subscription _battery_status_sub{ORB_ID(battery_status), 0};
 	uORB::Subscription _magnetometer_bias_estimate_sub{ORB_ID(magnetometer_bias_estimate)};
+#ifdef CONFIG_NAVPUT_CALIBRATION_LIFECYCLE
+	uORB::Subscription _vehicle_control_mode_sub{ORB_ID(navput_vehicle_control_mode)};
+#else
 	uORB::Subscription _vehicle_control_mode_sub{ORB_ID(vehicle_control_mode)};
+#endif
 
 	// Used to check, save and use learned magnetometer biases
 	uORB::SubscriptionMultiArray<estimator_sensor_bias_s> _estimator_sensor_bias_subs{ORB_ID::estimator_sensor_bias};

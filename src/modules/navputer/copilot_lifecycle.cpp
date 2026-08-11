@@ -32,49 +32,55 @@
  ****************************************************************************/
 
 /**
- * @file motion_detector.hpp
- * Implementation of the motion detector.
+ * @file copilot_lifecycle.cpp
+ * Implementation of the global state controller.
  *
  * @author
  */
 
-#include "EKF/common.h"
-#include <drivers/drv_hrt.h>
-#include <px4_platform_common/module_params.h>
+#include "copilot_lifecycle.hpp"
 
-#include <matrix/Vector3.hpp>
+#include <px4_platform_common/log.h>
 
-#ifndef MOTION_DETECTOR_1234_HPP
-#define MOTION_DETECTOR_1234_HPP
-
-class MotionDetector : public ModuleParams
+void CopilotLifecycle::update(MotionDetector::State state)
 {
-public:
-	enum class State
+	if (state != _state)
 	{
-		LandedStationary,
-		AirborneMoving,
-	};
-public:
-	explicit MotionDetector(ModuleParams *parent);
+		auto timestamp = hrt_absolute_time();
+		_state = state;
+		PX4_INFO("copilot calibration lifecycle armed: %s", isArmed() ? "true" : "false");
+		publishVehicleStatus(timestamp);
+		publishVehicleControlMode(timestamp);
+	}
+}
 
-	void update(const estimator::imuSample& input);
-	State state() const;
+bool CopilotLifecycle::isArmed() const
+{
+	return _state == MotionDetector::State::AirborneMoving;
+}
 
-private:
-	bool is_imu_valid(const estimator::imuSample& input) const;
+void CopilotLifecycle::publishVehicleStatus(hrt_abstime timestamp)
+{
+	vehicle_status_s navput_vehicle_status;
+	navput_vehicle_status.timestamp = timestamp;
+	navput_vehicle_status.arming_state = isArmed()
+			? vehicle_status_s::ARMING_STATE_ARMED
+			: vehicle_status_s::ARMING_STATE_DISARMED;
 
-private:
-	DEFINE_PARAMETERS(
-		// gates for MotionDetector
-		(ParamFloat<px4::params::NPT_MD_MOT_GYR>) _param_motion_gyro,
-		(ParamFloat<px4::params::NPT_MD_MOT_ACC>) _param_motion_accel,
-		(ParamInt<px4::params::NPT_MD_CF_TIME>) _param_motion_confirmation_time_ms
-	)
+	if (!_navput_vehicle_status_pub.publish(navput_vehicle_status))
+	{
+		PX4_WARN("failed to publish navput_vehicle_status");
+	}
+}
 
-private:
-	State _state{State::LandedStationary};
-	hrt_abstime _motion_candidate_started_at{0};
-};
+void CopilotLifecycle::publishVehicleControlMode(hrt_abstime timestamp)
+{
+	vehicle_control_mode_s navput_vehicle_control_mode;
+	navput_vehicle_control_mode.timestamp = timestamp;
+	navput_vehicle_control_mode.flag_armed = isArmed();
 
-#endif // !MOTION_DETECTOR_1234_HPP
+	if (!_navput_vehicle_control_mode_pub.publish(navput_vehicle_control_mode))
+	{
+		PX4_WARN("failed to publish navput_vehicle_control_mode");
+	}
+}

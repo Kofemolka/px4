@@ -91,7 +91,11 @@ private:
 	uORB::SubscriptionMultiArray<sensor_mag_s, MAX_SENSOR_COUNT> _sensor_mag_subs{ORB_ID::sensor_mag};
 	uORB::Subscription _parameter_update_sub{ORB_ID(parameter_update)};
 	uORB::Subscription _vehicle_angular_velocity_sub{ORB_ID(vehicle_angular_velocity)};
+#ifdef CONFIG_NAVPUT_CALIBRATION_LIFECYCLE
+	uORB::Subscription _vehicle_status_sub{ORB_ID(navput_vehicle_status)};
+#else
 	uORB::Subscription _vehicle_status_sub{ORB_ID(vehicle_status)};
+#endif
 
 	uORB::Publication<magnetometer_bias_estimate_s> _magnetometer_bias_estimate_pub{ORB_ID(magnetometer_bias_estimate)};
 

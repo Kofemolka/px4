@@ -32,49 +32,37 @@
  ****************************************************************************/
 
 /**
- * @file motion_detector.hpp
- * Implementation of the motion detector.
+ * @file copilot_lifecycle.hpp
+ * Implementation of the global state controller.
  *
  * @author
  */
 
-#include "EKF/common.h"
+#ifndef COPILOT_LIFECYCLE_HPP
+#define COPILOT_LIFECYCLE_HPP
+
+#include "motion_detector.hpp"
+
+#include <uORB/Publication.hpp>
+#include <uORB/topics/vehicle_status.h>
+#include <uORB/topics/vehicle_control_mode.h>
 #include <drivers/drv_hrt.h>
-#include <px4_platform_common/module_params.h>
 
-#include <matrix/Vector3.hpp>
-
-#ifndef MOTION_DETECTOR_1234_HPP
-#define MOTION_DETECTOR_1234_HPP
-
-class MotionDetector : public ModuleParams
+class CopilotLifecycle
 {
 public:
-	enum class State
-	{
-		LandedStationary,
-		AirborneMoving,
-	};
-public:
-	explicit MotionDetector(ModuleParams *parent);
-
-	void update(const estimator::imuSample& input);
-	State state() const;
+	void update(MotionDetector::State state);
+private:
+	bool isArmed() const;
+	void publishVehicleStatus(hrt_abstime timestamp);
+	void publishVehicleControlMode(hrt_abstime timestamp);
 
 private:
-	bool is_imu_valid(const estimator::imuSample& input) const;
+	// Publications
+	uORB::Publication<vehicle_status_s> _navput_vehicle_status_pub { ORB_ID(navput_vehicle_status) };
+	uORB::Publication<vehicle_control_mode_s> _navput_vehicle_control_mode_pub { ORB_ID(navput_vehicle_control_mode) };
 
-private:
-	DEFINE_PARAMETERS(
-		// gates for MotionDetector
-		(ParamFloat<px4::params::NPT_MD_MOT_GYR>) _param_motion_gyro,
-		(ParamFloat<px4::params::NPT_MD_MOT_ACC>) _param_motion_accel,
-		(ParamInt<px4::params::NPT_MD_CF_TIME>) _param_motion_confirmation_time_ms
-	)
-
-private:
-	State _state{State::LandedStationary};
-	hrt_abstime _motion_candidate_started_at{0};
+	MotionDetector::State _state{MotionDetector::State::LandedStationary};
 };
 
-#endif // !MOTION_DETECTOR_1234_HPP
+#endif // !COPILOT_LIFECYCLE_HPP

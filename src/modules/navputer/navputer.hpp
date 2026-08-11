@@ -97,6 +97,7 @@
 #include <uORB/topics/navput_aid_source1d.h>
 
 #include "motion_detector.hpp"
+#include "copilot_lifecycle.hpp"
 
 #include "mlat_aux.hpp"
 #include "fusion_controller.hpp"
@@ -238,6 +239,7 @@ private:
 	MlatAux _mlat_aux;
 	FusionController _fusion_controller;
 	MotionDetector _motion_detector;
+	CopilotLifecycle _copilot_lifecycle;
 
 	parameters *_params;
 
