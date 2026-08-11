@@ -44,7 +44,6 @@
 #include "motion_detector.hpp"
 
 #include <uORB/Publication.hpp>
-#include <uORB/Subscription.hpp>
 #include <uORB/topics/vehicle_status.h>
 #include <uORB/topics/vehicle_control_mode.h>
 #include <drivers/drv_hrt.h>
