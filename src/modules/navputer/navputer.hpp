@@ -102,6 +102,7 @@
 
 #include "mlat_aux.hpp"
 #include "fusion_controller.hpp"
+#include "optical_flow.hpp"
 
 using namespace time_literals;
 
@@ -245,6 +246,7 @@ private:
 	FusionController _fusion_controller;
 	MotionDetector _motion_detector;
 	CopilotLifecycle _copilot_lifecycle;
+	OpticalFlow _optical_flow;
 
 	parameters *_params;
 

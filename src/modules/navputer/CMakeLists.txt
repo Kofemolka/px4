@@ -51,6 +51,8 @@ set(NAVPUTER_SRCS
 	copilot_lifecycle.cpp
 	fusion_controller.hpp
 	fusion_controller.cpp
+	optical_flow.hpp
+	optical_flow.cpp
 )
 
 px4_add_module(

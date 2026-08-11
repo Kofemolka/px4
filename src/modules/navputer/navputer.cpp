@@ -238,6 +238,7 @@ void Navputer::Run()
 		UpdateFlowSample(ekf2_timestamps);
 
 		_fusion_controller.update(_ekf);
+		_optical_flow.update(_ekf);
 
 		if (_ekf.update()) {
 			if (!_system_flags_initialized) {
