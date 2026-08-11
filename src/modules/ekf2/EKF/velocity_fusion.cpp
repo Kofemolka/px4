@@ -33,6 +33,36 @@
 
 #include "ekf.h"
 
+bool Ekf::fuseOpticalFlowHeading(float heading_rad, float heading_var, float gate)
+{
+	const float sin_psi = sinf(heading_rad);
+	const float cos_psi = cosf(heading_rad);
+
+	// h(x) = velocity component perpendicular to heading_rad; observation z = 0.
+	// NOTE: this codebase's innovation convention is h(x) - z, not the textbook z - h(x)
+	// (see Ekf::fuse(): state -= K * innovation).
+	VectorState H;
+	H(State::vel.idx)     = -sin_psi;
+	H(State::vel.idx + 1) =  cos_psi;
+
+	const float vn = _state.vel(0);
+	const float ve = _state.vel(1);
+	const float innovation = -vn * sin_psi + ve * cos_psi; // h(x) - z, z == 0
+	const VectorState PH = P * H;
+	const float innovation_variance = PH.dot(H) + heading_var;
+
+	if ((innovation_variance < heading_var) || (innovation_variance < FLT_EPSILON)) {
+		return false;
+	}
+
+	if (sq(innovation) > sq(gate) * innovation_variance) {
+		return false;
+	}
+
+	VectorState K = P * H / innovation_variance;
+	return measurementUpdate(K, H, heading_var, innovation);
+}
+
 bool Ekf::fuseHorizontalVelocity(estimator_aid_source2d_s &aid_src)
 {
 	// vx, vy

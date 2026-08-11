@@ -95,6 +95,11 @@ public:
 	// should be called every time new data is pushed into the filter
 	bool update();
 
+	// Fuse "velocity component perpendicular to heading == 0", i.e. constrain horizontal
+	// velocity to lie along heading_rad without asserting its magnitude. Used by navputer's
+	// rangefinder-less optical-flow heading aid, where only flow direction is trustworthy.
+	bool fuseOpticalFlowHeading(float heading_rad, float heading_var, float gate = 3.f);
+
 	const StateSample &state() const { return _state; }
 
 #if defined(CONFIG_EKF2_BAROMETER)

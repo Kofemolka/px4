@@ -9,9 +9,8 @@ using matrix::Vector3f;
 namespace
 {
 // TODO: move to params (NPT_OF_*) once the approach is validated
-constexpr float kMinFlowRate = 0.05f;   ///< rad/s, min gyro-compensated flow magnitude to trust its direction
-constexpr float kMinGroundSpeed = 0.5f; ///< m/s, min EKF horizontal speed to trust its direction
-constexpr float kFakeVelVar = 10.f;      ///< (m/s)^2, conservative fixed variance for the fake velocity observation
+constexpr float kMinFlowRate = 0.05f; ///< rad/s, min gyro-compensated flow magnitude to trust its direction
+constexpr float kPerpVelVar = 1.f;    ///< (m/s)^2, tolerance on velocity perpendicular to the flow heading
 }
 
 OpticalFlow::OpticalFlow()
@@ -51,30 +50,19 @@ void OpticalFlow::update(Ekf& _ekf)
 			return;
 		}
 
-		// get IMU velocity vector
-		const Vector2f vel_ne{_ekf.getVelocity().xy()};
-		const float speed = vel_ne.norm();
-
-		if (speed < kMinGroundSpeed) {
-			return;
-		}
-
 		// get OF normal vector - gyro compensated, rotated body -> NED (assumes near-level camera)
 		const Vector2f dir_body = Vector2f(-flow_compensated(1), flow_compensated(0)).normalized();
 		const Dcmf R{_ekf.getQuaternion()};
-		const Vector2f dir_ne = Vector2f(R(0, 0) * dir_body(0) + R(0, 1) * dir_body(1),
-						  R(1, 0) * dir_body(0) + R(1, 1) * dir_body(1)).normalized();
+		const Vector2f dir_ne{R(0, 0) * dir_body(0) + R(0, 1) * dir_body(1),
+				      R(1, 0) * dir_body(0) + R(1, 1) * dir_body(1)};
 
-		// produce OF velocity vector: direction from flow, magnitude from the EKF's own estimate
-		const Vector2f vel_fake = dir_ne * speed;
+		if (!dir_ne.isAllFinite() || dir_ne.norm() < FLT_EPSILON) {
+			return;
+		}
 
-		// fuse velocity observation
-		const auxVelSample sample {
-			.time_us = optical_flow.timestamp_sample - optical_flow.integration_timespan_us / 2,
-			.vel = vel_fake,
-			.velVar = Vector2f(kFakeVelVar, kFakeVelVar),
-		};
-
-		_ekf.setAuxVelData(sample);
+		// fuse velocity observation: constrain heading only, leave magnitude to the IMU
+		// (avoids feeding the EKF's own speed estimate back into itself as a "measurement")
+		const float heading_rad = atan2f(dir_ne(1), dir_ne(0));
+		_ekf.fuseOpticalFlowHeading(heading_rad, kPerpVelVar);
 	}
 }
