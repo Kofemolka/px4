@@ -55,7 +55,7 @@ param set-default SIH_RNGBC_NOISE 50
 param set-default MPC_XY_CRUISE 20
 param set-default MPC_VEL_MANUAL 20
 param set-default MPC_XY_VEL_MAX 50
-param set-default MPC_TILTMAX_AIR 55
+param set-default MPC_TILTMAX_AIR 44
 param set-default MIS_TAKEOFF_ALT 25
 
 param set-default SIH_LOC_LAT0 49.796766
