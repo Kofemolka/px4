@@ -44,31 +44,11 @@
 
 void CopilotLifecycle::update(MotionDetector::State state)
 {
-	vehicle_status_s vehicle_status;
-	const bool vehicle_status_updated = _vehicle_status_sub.update(&vehicle_status);
-	if (vehicle_status_updated)
-	{
-		_vehicle_status = vehicle_status;
-	}
-
-	vehicle_control_mode_s vehicle_control_mode;
-	const bool vehicle_control_mode_updated = _vehicle_control_mode_sub.update(&vehicle_control_mode);
-	if (vehicle_control_mode_updated)
-	{
-		_vehicle_control_mode = vehicle_control_mode;
-	}
-
-	const bool state_changed = state != _state;
-
-	if (state_changed)
-	{
-		_state = state;
-		PX4_INFO("copilot calibration lifecycle armed: %s", isArmed() ? "true" : "false");
-	}
-
-	if (state_changed || vehicle_status_updated || vehicle_control_mode_updated)
+	if (state != _state)
 	{
 		auto timestamp = hrt_absolute_time();
+		_state = state;
+		PX4_INFO("copilot calibration lifecycle armed: %s", isArmed() ? "true" : "false");
 		publishVehicleStatus(timestamp);
 		publishVehicleControlMode(timestamp);
 	}
@@ -76,14 +56,12 @@ void CopilotLifecycle::update(MotionDetector::State state)
 
 bool CopilotLifecycle::isArmed() const
 {
-	return _state == MotionDetector::State::AirborneMoving
-	       || _vehicle_status.arming_state == vehicle_status_s::ARMING_STATE_ARMED
-	       || _vehicle_control_mode.flag_armed;
+	return _state == MotionDetector::State::AirborneMoving;
 }
 
 void CopilotLifecycle::publishVehicleStatus(hrt_abstime timestamp)
 {
-	vehicle_status_s navput_vehicle_status{_vehicle_status};
+	vehicle_status_s navput_vehicle_status;
 	navput_vehicle_status.timestamp = timestamp;
 	navput_vehicle_status.arming_state = isArmed()
 			? vehicle_status_s::ARMING_STATE_ARMED
@@ -97,7 +75,7 @@ void CopilotLifecycle::publishVehicleStatus(hrt_abstime timestamp)
 
 void CopilotLifecycle::publishVehicleControlMode(hrt_abstime timestamp)
 {
-	vehicle_control_mode_s navput_vehicle_control_mode{_vehicle_control_mode};
+	vehicle_control_mode_s navput_vehicle_control_mode;
 	navput_vehicle_control_mode.timestamp = timestamp;
 	navput_vehicle_control_mode.flag_armed = isArmed();
 

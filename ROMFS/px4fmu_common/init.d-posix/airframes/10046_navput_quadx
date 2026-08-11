@@ -69,9 +69,4 @@ param set-default NPT_FC_AGP_LATCH 5.0
 # Disable the battery/throttle magnetometer compensation
 param set-default CAL_MAG_COMP_TYP 0
 
-# Disable behavior: "Automatically disarm if Commander does not detect takeoff after arming"
-param set-default COM_DISARM_PRFLT -1
-# Disable behavior: "Automatically disarm if Commander detects landing"
-param set-default COM_DISARM_LAND 0
-
 navputer start

@@ -38,8 +38,8 @@
  * @author
  */
 
-#ifndef COPILOT_LIFECYCLE_1234_HPP
-#define COPILOT_LIFECYCLE_1234_HPP
+#ifndef COPILOT_LIFECYCLE_HPP
+#define COPILOT_LIFECYCLE_HPP
 
 #include "motion_detector.hpp"
 
@@ -59,16 +59,11 @@ private:
 	void publishVehicleControlMode(hrt_abstime timestamp);
 
 private:
-	// Subscriptions
-	uORB::Subscription _vehicle_status_sub { ORB_ID(vehicle_status) };
-	uORB::Subscription _vehicle_control_mode_sub { ORB_ID(vehicle_control_mode) };
 	// Publications
 	uORB::Publication<vehicle_status_s> _navput_vehicle_status_pub { ORB_ID(navput_vehicle_status) };
 	uORB::Publication<vehicle_control_mode_s> _navput_vehicle_control_mode_pub { ORB_ID(navput_vehicle_control_mode) };
 
 	MotionDetector::State _state{MotionDetector::State::LandedStationary};
-	vehicle_status_s _vehicle_status{};
-	vehicle_control_mode_s _vehicle_control_mode{};
 };
 
-#endif // !COPILOT_LIFECYCLE_1234_HPP
+#endif // !COPILOT_LIFECYCLE_HPP
