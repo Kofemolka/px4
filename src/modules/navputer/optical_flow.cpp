@@ -13,22 +13,21 @@ constexpr float kMinFlowRate = 0.05f; ///< rad/s, min gyro-compensated flow magn
 constexpr float kPerpVelVar = 1.f;    ///< (m/s)^2, tolerance on velocity perpendicular to the flow heading
 }
 
-OpticalFlow::OpticalFlow()
+OpticalFlow::OpticalFlow(ModuleParams *parent) :
+	ModuleParams(parent)
 {
 
 }
 
 void OpticalFlow::update(Ekf& _ekf)
 {
-	// TODO: custom toggle
+	if (!_param_npt_fuse_ofh.get()) {
+		return;
+	}
 
 	vehicle_optical_flow_s optical_flow;
 
 	if (_vehicle_optical_flow_sub.update(&optical_flow)) {
-
-		// if (!_ekf.getFusionControlHandle()->of.intended()) {
-		// 	return;
-		// }
 
 		const float dt = 1e-6f * (float)optical_flow.integration_timespan_us;
 

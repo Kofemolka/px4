@@ -47,6 +47,7 @@ Navputer::Navputer(const px4::wq_config_t &config, bool replay_mode):
 	ScheduledWorkItem(MODULE_NAME, config),
 	_fusion_controller(this, *_ekf.getFusionControlHandle()),
 	_motion_detector(this),
+	_optical_flow(this),
 	_params(_ekf.getParamHandle()),
 	_param_npt_rngbc_ctrl(_params->ekf2_rngbc_ctrl),
 	_param_npt_rngbc_delay(_params->ekf2_rngbc_delay),

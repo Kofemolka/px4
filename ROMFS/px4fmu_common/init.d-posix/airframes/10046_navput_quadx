@@ -72,6 +72,7 @@ param set-default NPT_FUSE_MAG 1
 param set-default NPT_FUSE_RNGBC 1
 param set-default NPT_FUSE_AGP0 1
 param set-default NPT_FUSE_OF 0
+param set-default NPT_FUSE_OFH 0
 
 param set-default NPT_FC_AGP_LATCH 5.0
 

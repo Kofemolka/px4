@@ -88,6 +88,15 @@ parameters:
         long: Enable/disable optical flow fusion in the navputer estimator.
       type: boolean
       default: 1
+    NPT_FUSE_OFH:
+      description:
+        short: Optical flow heading fusion enable
+        long: |-
+          Enable/disable direction-only optical flow fusion: constrains horizontal velocity
+          to the gyro-compensated flow heading without asserting its magnitude. Independent
+          of the standard rangefinder-scaled optical flow fusion (NPT_OF_CTRL/NPT_FUSE_OF).
+      type: boolean
+      default: 1
 
     NPT_FC_AGP_LATCH:
       description:
