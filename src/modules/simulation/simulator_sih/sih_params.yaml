@@ -320,6 +320,47 @@ parameters:
       default: 500
       unit: ms
       min: 1
+    SIH_OPTFLOW_EN:
+      description:
+        short: Enable optical flow simulation
+        long: If disabled, no optical flow measurements are published.
+      type: boolean
+      default: 1
+    SIH_OF_D_NOISE:
+      description:
+        short: Optical flow distance measurement noise standard deviation
+        long: Gaussian noise added to the simulated optical flow distance_m field. Set to 0 to disable noise.
+      type: float
+      default: 0.10
+      unit: m
+      min: 0.0
+      max: 5.0
+      decimal: 3
+    SIH_OF_Q_NOISE:
+      description:
+        short: Optical flow quality noise standard deviation
+        long: |-
+          Gaussian noise added to the simulated optical flow quality field (0-255 scale),
+          around a nominal quality of 255. Set to 0 to disable noise.
+      type: float
+      default: 50.0
+      unit: ''
+      min: 0.0
+      max: 128.0
+      decimal: 1
+    SIH_OF_P_NOISE:
+      description:
+        short: Optical flow rate noise standard deviation
+        long: |-
+          Gaussian noise added to the simulated optical flow LOS rate (translation plus
+          body rotation) before integrating into pixel_flow, independently per axis.
+          Set to 0 to disable noise.
+      type: float
+      default: 0.01
+      unit: rad/s
+      min: 0.0
+      max: 0.1
+      decimal: 3
     SIH_F_T_MAX:
       description:
         short: Forward thruster max thrust (N)

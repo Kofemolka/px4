@@ -273,7 +273,8 @@ void Sih::sensor_step()
 	}
 
 	// optical flow published at 50 Hz
-	if (now - _optical_flow_time >= 20_ms) {
+	if (_sih_optical_flow_en.get()
+	     && now - _optical_flow_time >= 20_ms) {
 		send_optical_flow(now);
 	}
 
@@ -890,14 +891,24 @@ void Sih::send_optical_flow(const hrt_abstime &time_now_us)
 		// raw (uncompensated) LOS rate a physical sensor would see: translation plus body rotation
 		const Vector2f flow_rate = flow_compensated - _w_B.xy();
 
+		const float pix_noise_std = _sih_optical_flow_pix_noise.get();
+		const Vector2f flow_rate_noise = (pix_noise_std > 0.f)
+						  ? Vector2f(generate_wgn(), generate_wgn()) * pix_noise_std
+						  : Vector2f{};
+
 		// PX4 optical flow convention: pixel_flow/delta_angle use the opposite sign to the LOS/body rate
-		optical_flow.pixel_flow[0] = -flow_rate(0) * dt;
-		optical_flow.pixel_flow[1] = -flow_rate(1) * dt;
+		optical_flow.pixel_flow[0] = -(flow_rate(0) + flow_rate_noise(0)) * dt;
+		optical_flow.pixel_flow[1] = -(flow_rate(1) + flow_rate_noise(1)) * dt;
 		optical_flow.delta_angle[0] = _w_B(0) * dt;
 		optical_flow.delta_angle[1] = _w_B(1) * dt;
 		optical_flow.delta_angle[2] = _w_B(2) * dt;
-		optical_flow.distance_m = distance;
-		optical_flow.quality = 255;
+		const float dist_noise_std = _sih_optical_flow_dist_noise.get();
+		const float dist_noise_m = (dist_noise_std > 0.f) ? generate_wgn() * dist_noise_std : 0.f;
+		optical_flow.distance_m = math::max(0.f, distance + dist_noise_m);
+
+		const float qual_noise_std = _sih_optical_flow_qual_noise.get();
+		const float qual_noise = (qual_noise_std > 0.f) ? generate_wgn() * qual_noise_std : 0.f;
+		optical_flow.quality = static_cast<uint8_t>(math::constrain(125.f + qual_noise, 0.f, 255.f));
 
 	} else {
 		// out of range or first sample: report zero flow at the lowest quality

@@ -361,6 +361,10 @@ private:
 		(ParamBool<px4::params::SIH_RNGBC_EN>) _sih_ranging_beacon_en,
 		(ParamFloat<px4::params::SIH_RNGBC_NOISE>) _sih_ranging_beacon_noise,
 		(ParamFloat<px4::params::SIH_RNGBC_MAXR>) _sih_ranging_beacon_max_range,
-		(ParamInt<px4::params::SIH_RNGBC_INTV>) _sih_ranging_beacon_interval
+		(ParamInt<px4::params::SIH_RNGBC_INTV>) _sih_ranging_beacon_interval,
+		(ParamBool<px4::params::SIH_OPTFLOW_EN>) _sih_optical_flow_en,
+		(ParamFloat<px4::params::SIH_OF_D_NOISE>) _sih_optical_flow_dist_noise,
+		(ParamFloat<px4::params::SIH_OF_Q_NOISE>) _sih_optical_flow_qual_noise,
+		(ParamFloat<px4::params::SIH_OF_P_NOISE>) _sih_optical_flow_pix_noise
 	)
 };
