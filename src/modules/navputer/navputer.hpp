@@ -98,6 +98,7 @@
 
 #include "motion_detector.hpp"
 #include "copilot_lifecycle.hpp"
+#include "elevation_initializer.hpp"
 
 #include "mlat_aux.hpp"
 #include "fusion_controller.hpp"
@@ -240,6 +241,7 @@ private:
 	FusionController _fusion_controller;
 	MotionDetector _motion_detector;
 	CopilotLifecycle _copilot_lifecycle;
+	ElevationInitializer _elevation_initializer;
 
 	parameters *_params;
 
