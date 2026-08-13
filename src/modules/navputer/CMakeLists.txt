@@ -51,6 +51,8 @@ set(NAVPUTER_SRCS
 	copilot_lifecycle.cpp
 	fusion_controller.hpp
 	fusion_controller.cpp
+	elevation_initializer.hpp
+	elevation_initializer.cpp
 )
 
 px4_add_module(

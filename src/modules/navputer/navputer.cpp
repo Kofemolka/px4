@@ -237,11 +237,20 @@ void Navputer::Run()
 
 		_fusion_controller.update(_ekf);
 
+		//static hrt_abstime LAST_LOG{0};
+
 		if (_ekf.update()) {
+			//if (now - LAST_LOG >= 1_s) {
+			//	PX4_WARN("ekf.update returned TRUE");
+			//	LAST_LOG = now;
+			//}
+
 			if (!_system_flags_initialized) {
 				UpdateSystemFlags(now);
 				_system_flags_initialized = true;
 			}
+
+			_elevation_initializer.update(_ekf);
 
 			PublishLocalPosition(now);
 			PublishStatusFlags(now);
@@ -255,6 +264,12 @@ void Navputer::Run()
 			UpdateGyroCalibration(now);
 			UpdateMagCalibration(now);
 		}
+		//else {
+		//	if (now - LAST_LOG >= 1_s) {
+		//		PX4_WARN("ekf.update returned FALSE");
+		//		LAST_LOG = now;
+		//	}
+		//}
 
 		PublishAttitude(now); // publish attitude immediately (uses quaternion from output predictor)
 	}
