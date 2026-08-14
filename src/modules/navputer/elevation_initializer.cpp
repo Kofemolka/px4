@@ -253,11 +253,11 @@ ElevationInitializer::LookupResult ElevationInitializer::lookupInFile(const int 
 		return res;
 	}
 
-        // HGT samples are signed, big-endian int16 values.
+	// HGT samples are signed, big-endian int16 values.
 	// Decode from big-endian to little endian:
-        const uint16_t raw = (static_cast<uint16_t>(bytes[0]) << 8)
-				| static_cast<uint16_t>(bytes[1]);
-        const int16_t elevation_m = static_cast<int16_t>(raw);
+	const uint16_t raw = (static_cast<uint16_t>(bytes[0]) << 8)
+		| static_cast<uint16_t>(bytes[1]);
+	const int16_t elevation_m = static_cast<int16_t>(raw);
 
 	res.success = true;
 	res.terrain_elevation_m = static_cast<float>(elevation_m);
