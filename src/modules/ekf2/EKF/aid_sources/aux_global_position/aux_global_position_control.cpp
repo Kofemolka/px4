@@ -107,7 +107,7 @@ bool AgpSource::update(Ekf &ekf, const estimator::imuSample &imu_delayed)
 
 		if (!ekf._fc.agp[_slot].intended()) {
 			_state = State::kStopped;
-			return true;
+			return false; // TODO: weird. First disabled AGP prevent all others from running
 		}
 
 		const LatLonAlt position(sample.latitude, sample.longitude, sample.altitude_amsl);
