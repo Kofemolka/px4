@@ -49,17 +49,7 @@ public:
 	enum class State
 	{
 		Pending,
-		Initialized,
-		Failed,
-		Skipped
-	};
-
-	enum class FailureReason
-	{
-		None,
-		HeightMapUnavailable,
-		NoData,
-		AltitudeInitFailed
+		Done
 	};
 
 public:
@@ -76,7 +66,6 @@ private:
 	bool isPreLookupStateOk(const Ekf& ekf, double& latitude, double& longitude, float& altitude);
 	LookupResult lookup(double latitude, double longitude);
 	LookupResult lookupInFile(const int fd, const char* path, double latitude, double longitude);
-	void transitionTo(State new_state, FailureReason reason = FailureReason::None);
 
 private:
 	State _state{State::Pending};
