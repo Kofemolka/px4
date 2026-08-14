@@ -41,6 +41,7 @@
 #include "elevation_initializer.hpp"
 
 #include <px4_platform_common/defines.h>
+#include <matrix/helper_functions.hpp>
 
 #include <cerrno>
 #include <cmath>
@@ -57,60 +58,6 @@ constexpr size_t kFileNameBuffSize = 96;
 constexpr int kDimension = 1201;
 constexpr off_t kHgt1201FileSize = static_cast<off_t>(kDimension) * kDimension * sizeof(int16_t);
 constexpr int16_t kHgtNoData = INT16_MIN;
-
-const char* toStr(ElevationInitializer::State state)
-{
-	if (state == ElevationInitializer::State::Pending)
-	{
-		return "Pending";
-	}
-	else if (state == ElevationInitializer::State::Failed)
-	{
-		return "Failed";
-	}
-	else if (state == ElevationInitializer::State::Initialized)
-	{
-		return "Initialized";
-	}
-	else if (state == ElevationInitializer::State::Skipped)
-	{
-		return "Skipped";
-	}
-
-	return "Unknown";
-}
-
-const char* toStr(ElevationInitializer::FailureReason reason)
-{
-	if (reason == ElevationInitializer::FailureReason::AltitudeInitFailed)
-	{
-		return "Failure: AltitudeInitFailed";
-	}
-	else if (reason == ElevationInitializer::FailureReason::HeightMapUnavailable)
-	{
-		return "Failure: HeightMapUnavailable";
-	}
-	else if (reason == ElevationInitializer::FailureReason::NoData)
-	{
-		return "Failure: NoData";
-	}
-
-	return "";
-}
-
-double normalizeTo180(double longitude)
-{
-	// Normalize longitude to [-180, 180).
-	longitude = fmod(longitude + 180.0, 360.0);
-
-	if (longitude < 0.0)
-	{
-		longitude += 360.0;
-	}
-	longitude -= 180.0;
-
-	return longitude;
-}
 
 bool makeHgtPath(double latitude, double longitude, char *path, size_t path_size)
 {
@@ -135,12 +82,6 @@ bool makeHgtPath(double latitude, double longitude, char *path, size_t path_size
 }
 
 } // namespace
-
-void ElevationInitializer::transitionTo(State new_state, FailureReason reason)
-{
-	PX4_INFO("ElevationInitializer: state changed: %s -> %s. %s", toStr(_state), toStr(new_state), toStr(reason));
-	_state = new_state;
-}
 
 bool ElevationInitializer::isPreLookupStateOk(const Ekf& ekf, double& latitude, double& longitude, float& altitude)
 {
@@ -177,16 +118,21 @@ void ElevationInitializer::update(Ekf& ekf)
 		return;
 	}
 
+	const hrt_abstime lookup_started_at = hrt_absolute_time();
 	const auto res = lookup(latitude, longitude);
+	const hrt_abstime elapsed_time = hrt_elapsed_time(&lookup_started_at);
+	PX4_INFO("ElevationInitializer: Lookup lasted for %llu milliseconds", elapsed_time / 1000ULL);
 	
 	if (!res.success)
 	{
-		transitionTo(State::Failed, FailureReason::HeightMapUnavailable);
+		_state = State::Done;
+		PX4_WARN("ElevationInitializer: Failed to find the region in a height map");
 		return;
 	}
 	else if (res.nodata || !PX4_ISFINITE(res.terrain_elevation_m))
 	{
-		transitionTo(State::Failed, FailureReason::NoData);
+		_state = State::Done;
+		PX4_WARN("ElevationInitializer: The region in the height map has no data");
 		return;
 	}
 
@@ -198,7 +144,8 @@ void ElevationInitializer::update(Ekf& ekf)
 
 	if (!ekf.setEkfGlobalOrigin(latitude, longitude, res.terrain_elevation_m))
 	{
-		transitionTo(State::Failed, FailureReason::AltitudeInitFailed);
+		_state = State::Done;
+		PX4_WARN("ElevationInitializer: Failed to change Ekf global origin");
 		return;
 	}
 
@@ -212,12 +159,14 @@ void ElevationInitializer::update(Ekf& ekf)
 
 		if (!PX4_ISFINITE(new_altitude))
 		{
-			transitionTo(State::Failed, FailureReason::AltitudeInitFailed);
+			_state = State::Done;
+			PX4_WARN("ElevationInitializer: Altitude origin is invalid after origin change");
 			return;
 		}
 	}
 
-	transitionTo(State::Initialized);
+	PX4_INFO("ElevationInitializer: Successfully changing the altitude origin");
+	_state = State::Done;
 }
 
 ElevationInitializer::LookupResult ElevationInitializer::lookup(double latitude, double longitude)
@@ -230,7 +179,7 @@ ElevationInitializer::LookupResult ElevationInitializer::lookup(double latitude,
 		return res;
 	}
 
-	longitude = normalizeTo180(longitude);
+	longitude = matrix::wrap(longitude, -180.0, 180.0);
 
 	// Example: N50E025.hgt
 	char path[kFileNameBuffSize] {};
@@ -294,18 +243,13 @@ ElevationInitializer::LookupResult ElevationInitializer::lookupInFile(const int 
 	}
 
 	const off_t offset = static_cast<off_t>(offset_in_bytes);
-
-	if (::lseek(fd, offset, SEEK_SET) != offset)
-	{
-		PX4_WARN("ElevationInitializer: seek failed in %s: %d", path, errno);
-		return res;
-	}
-
 	uint8_t bytes[2] {};
 
-	if (::read(fd, bytes, sizeof(bytes)) != static_cast<ssize_t>(sizeof(bytes)))
+	const ssize_t bytes_read = ::pread(fd, bytes, sizeof(bytes), offset);
+
+	if (bytes_read != static_cast<ssize_t>(sizeof(bytes)))
 	{
-		PX4_WARN("ElevationInitializer: failed to read int16_t from the %s: %d", path, errno);
+		PX4_WARN("ElevationInitializer: failed to read int16_t from %s: %d", path, errno);
 		return res;
 	}
 
