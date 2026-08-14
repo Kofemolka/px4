@@ -96,6 +96,7 @@
 #include <uORB/topics/navput_status_flags.h>
 #include <uORB/topics/navput_fusion_control.h>
 #include <uORB/topics/navput_aid_source1d.h>
+#include <uORB/topics/navput_aid_source2d.h>
 
 #include "motion_detector.hpp"
 #include "copilot_lifecycle.hpp"
@@ -174,6 +175,22 @@ private:
 		}
 	}
 
+	template <typename T>
+	void PublishAidSourceStatus(const hrt_abstime &timestamp, const T &status, hrt_abstime &status_publish_last,
+				    uORB::PublicationMulti<T> &pub)
+	{
+		if (status.timestamp_sample > status_publish_last) {
+			// publish if updated
+			T status_out{status};
+			status_out.estimator_instance = 0;
+			status_out.timestamp = hrt_absolute_time();
+			pub.publish(status_out);
+
+			// record timestamp sample
+			status_publish_last = status.timestamp_sample;
+		}
+	}
+
 	void UpdateMagSample(ekf2_timestamps_s &ekf2_timestamps);
 	void UpdateBaroSample(ekf2_timestamps_s &ekf2_timestamps);
 	void UpdateRangingBeaconSample(ekf2_timestamps_s &ekf2_timestamps);
@@ -227,6 +244,9 @@ private:
 
 	hrt_abstime _status_ranging_beacon_pub_last {0};
 	uORB::Publication<navput_aid_source1d_s> _aid_src_ranging_beacon_pub{ORB_ID(navput_aid_src_ranging_beacon)};
+
+	uORB::PublicationMulti<navput_aid_source2d_s> _aid_src_optical_flow_pub{ORB_ID(navput_aid_src_optical_flow)};
+	hrt_abstime _status_optical_flow_pub_last{0};
 
 	hrt_abstime _last_status_flags_publish{0};
 	uint64_t _filter_control_status{0};

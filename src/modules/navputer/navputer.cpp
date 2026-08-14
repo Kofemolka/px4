@@ -560,12 +560,38 @@ static navput_aid_source1d_s to_navput_aid_source1d(const estimator_aid_source1d
 	return dst;
 }
 
+static navput_aid_source2d_s to_navput_aid_source2d(const estimator_aid_source2d_s &src)
+{
+	navput_aid_source2d_s dst{};
+	dst.timestamp = src.timestamp;
+	dst.timestamp_sample = src.timestamp_sample;
+	dst.estimator_instance = src.estimator_instance;
+	dst.device_id = src.device_id;
+	dst.time_last_fuse = src.time_last_fuse;
+
+	for (int i = 0; i < 2; i++) {
+		dst.observation[i] = src.observation[i];
+		dst.observation_variance[i] = src.observation_variance[i];
+		dst.innovation[i] = src.innovation[i];
+		dst.innovation_filtered[i] = src.innovation_filtered[i];
+		dst.innovation_variance[i] = src.innovation_variance[i];
+		dst.test_ratio[i] = src.test_ratio[i];
+		dst.test_ratio_filtered[i] = src.test_ratio_filtered[i];
+	}
+
+	dst.innovation_rejected = src.innovation_rejected;
+	dst.fused = src.fused;
+	return dst;
+}
+
 void Navputer::PublishAidSourceStatus(const hrt_abstime &timestamp)
 {
 	PublishAidSourceStatus(timestamp, to_navput_aid_source1d(_ekf.aid_src_baro_hgt()), _status_baro_hgt_pub_last,
 				_aid_src_baro_hgt_pub);
 	PublishAidSourceStatus(timestamp, to_navput_aid_source1d(_ekf.aid_src_ranging_beacon()), _status_ranging_beacon_pub_last,
 				_aid_src_ranging_beacon_pub);
+	PublishAidSourceStatus(timestamp, to_navput_aid_source2d(_ekf.aid_src_optical_flow()), _status_optical_flow_pub_last,
+			       _aid_src_optical_flow_pub);
 }
 
 void Navputer::UpdateBaroSample(ekf2_timestamps_s &ekf2_timestamps)

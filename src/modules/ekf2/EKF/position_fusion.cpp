@@ -53,6 +53,32 @@ void Ekf::updateVerticalPositionAidStatus(estimator_aid_source1d_s &aid_src, con
 	}
 }
 
+bool Ekf::fuseOpticalFlowPosition(float pos_n, float pos_e, float pos_var, float gate)
+{
+	const float target[2] = {pos_n, pos_e};
+	bool fused = false;
+
+	// fuse N and E independently, same pattern as fuseHorizontalPosition/fuseHorizontalVelocity
+	for (int i = 0; i < 2; i++) {
+		const int state_index = State::pos.idx + i;
+		const float innovation = _state.pos(i) - target[i]; // h(x) - z (see Ekf::fuse(): state -= K * innovation)
+		const float innovation_variance = P(state_index, state_index) + pos_var;
+
+		if ((innovation_variance < pos_var) || (innovation_variance < FLT_EPSILON)) {
+			continue;
+		}
+
+		if (sq(innovation) > sq(gate) * innovation_variance) {
+			continue;
+		}
+
+		fuseDirectStateMeasurement(innovation, innovation_variance, pos_var, state_index);
+		fused = true;
+	}
+
+	return fused;
+}
+
 bool Ekf::fuseHorizontalPosition(estimator_aid_source2d_s &aid_src)
 {
 	// x & y

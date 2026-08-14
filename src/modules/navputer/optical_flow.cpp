@@ -10,7 +10,7 @@ namespace
 {
 // TODO: move to params (NPT_OF_*) once the approach is validated
 constexpr float kMinFlowRate = 0.05f; ///< rad/s, min gyro-compensated flow magnitude to trust its direction
-constexpr float kPerpVelVar = 1.f;    ///< (m/s)^2, tolerance on velocity perpendicular to the flow heading
+constexpr float kPosVar = 0.25f;      ///< m^2, tolerance on the fused position target
 }
 
 OpticalFlow::OpticalFlow(ModuleParams *parent) :
@@ -19,9 +19,13 @@ OpticalFlow::OpticalFlow(ModuleParams *parent) :
 
 }
 
-void OpticalFlow::update(Ekf& _ekf)
+void OpticalFlow::update(Ekf& ekf)
 {
 	if (!_param_npt_fuse_ofh.get()) {
+		return;
+	}
+
+	if(!ekf.global_origin_valid()) {
 		return;
 	}
 
@@ -51,17 +55,39 @@ void OpticalFlow::update(Ekf& _ekf)
 
 		// get OF normal vector - gyro compensated, rotated body -> NED (assumes near-level camera)
 		const Vector2f dir_body = Vector2f(-flow_compensated(1), flow_compensated(0)).normalized();
-		const Dcmf R{_ekf.getQuaternion()};
-		const Vector2f dir_ne{R(0, 0) * dir_body(0) + R(0, 1) * dir_body(1),
-				      R(1, 0) * dir_body(0) + R(1, 1) * dir_body(1)};
+		const Dcmf R{ekf.getQuaternion()};
+		const Vector2f dir_ne = Vector2f(R(0, 0) * dir_body(0) + R(0, 1) * dir_body(1),
+						  R(1, 0) * dir_body(0) + R(1, 1) * dir_body(1)).normalized();
 
-		if (!dir_ne.isAllFinite() || dir_ne.norm() < FLT_EPSILON) {
+		if (!dir_ne.isAllFinite()) {
 			return;
 		}
 
-		// fuse velocity observation: constrain heading only, leave magnitude to the IMU
-		// (avoids feeding the EKF's own speed estimate back into itself as a "measurement")
-		const float heading_rad = atan2f(dir_ne(1), dir_ne(0));
-		_ekf.fuseOpticalFlowHeading(heading_rad, kPerpVelVar);
+		// produce an X/Y point along the flow vector: advance the current position by
+		// dir_ne * speed * dt and fuse that as a position target, not a velocity observation.
+		// This still uses the EKF's own speed for the step length, but fusing it as position
+		// shrinks the EKF's position uncertainty directly rather than repeatedly asserting
+		// confidence in its own velocity (the source of the earlier runaway).
+		const Vector2f vel_ne{ekf.getVelocity().xy()};
+		const float speed = vel_ne.norm();
+
+		const Vector2f pos_target = Vector2f(ekf.getPosition().xy()) + dir_ne * speed * dt;
+
+		double lat, lon;
+		ekf.global_origin().reproject(pos_target(0), pos_target(1), lat, lon);
+
+		// ekf.fuseOpticalFlowPosition(pos_target(0), pos_target(1), kPosVar);
+		aux_global_position_s agp{};
+		agp.timestamp_sample = optical_flow.timestamp_sample;
+		agp.id = 112;
+		agp.source = aux_global_position_s::SOURCE_VISION;
+		agp.lat = lat;
+		agp.lon = lon;
+		agp.alt = NAN;
+		agp.eph = optical_flow.quality / 3; // TODO: need param
+		agp.epv = NAN;
+		agp.lat_lon_reset_counter = 0;
+		agp.timestamp = hrt_absolute_time();
+		_aux_global_position_pub.publish(agp);
 	}
 }

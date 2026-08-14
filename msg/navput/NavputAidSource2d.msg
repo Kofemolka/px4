@@ -21,4 +21,4 @@ float32[2] test_ratio_filtered  # signed filtered test ratio
 bool innovation_rejected        # true if the observation has been rejected
 bool fused                      # true if the sample was successfully fused
 
-# TOPICS navput_aid_src_aux_global_position
+# TOPICS navput_aid_src_aux_global_position navput_aid_src_optical_flow

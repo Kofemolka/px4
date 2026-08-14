@@ -15,6 +15,11 @@
 #
 # Omitting 'options' (or individual keys) inherits from global PX4 parameters
 # ZENOH_PUB_CC / ZENOH_PUB_REL / ZENOH_PUB_EXPR / ZENOH_PUB_PRIO.
+#
+# For multi-instance uORB topics, add one entry per instance with an explicit 'instance'
+# (non-negative integer). Omitting 'instance' means instance 0. The instance number is
+# appended directly to 'topic' (no separator), e.g. instance 1 of /fmu/out/example becomes
+# /fmu/out/example1 on the wire.
 #####
 publications:
 
@@ -152,6 +157,10 @@ publications:
   - topic: /fmu/out/aux_global_position
     type: px4_msgs::msg::AuxGlobalPosition
 
+  - topic: /fmu/out/aux_global_position
+    type: px4_msgs::msg::AuxGlobalPosition
+    instance: 1
+
   - topic: /fmu/out/navput_aid_src_baro_hgt
     type: px4_msgs::msg::NavputAidSource1d
 
@@ -161,8 +170,15 @@ publications:
   - topic: /fmu/out/navput_aid_src_aux_global_position
     type: px4_msgs::msg::NavputAidSource2d
 
+  - topic: /fmu/out/navput_aid_src_optical_flow
+    type: px4_msgs::msg::NavputAidSource2d
+
   - topic: /fmu/out/estimator_aid_src_aux_global_position
     type: px4_msgs::msg::EstimatorAidSource2d
+
+  - topic: /fmu/out/estimator_aid_src_aux_global_position
+    type: px4_msgs::msg::EstimatorAidSource2d
+    instance: 1
 
 # Create uORB::Publication
 subscriptions:

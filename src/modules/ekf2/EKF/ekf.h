@@ -100,6 +100,12 @@ public:
 	// rangefinder-less optical-flow heading aid, where only flow direction is trustworthy.
 	bool fuseOpticalFlowHeading(float heading_rad, float heading_var, float gate = 3.f);
 
+	// Fuse an absolute horizontal position target (pos_n, pos_e), e.g. the current position advanced
+	// by dir_ne * speed * dt for a gyro-compensated flow direction. Position-domain counterpart of
+	// fuseOpticalFlowHeading: fusing as a position (rather than a velocity) observation shrinks the
+	// EKF's position uncertainty directly, without repeatedly asserting confidence in its own velocity.
+	bool fuseOpticalFlowPosition(float pos_n, float pos_e, float pos_var, float gate = 3.f);
+
 	const StateSample &state() const { return _state; }
 
 #if defined(CONFIG_EKF2_BAROMETER)

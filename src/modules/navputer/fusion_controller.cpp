@@ -16,6 +16,8 @@ void FusionController::updateParams()
 	_fc.mag.enabled = _param_npt_fuse_mag.get();
 	_fc.rngbcn.enabled = _param_npt_fuse_rngbc.get();
 	_fc.of.enabled = _param_npt_fuse_of.get();
+
+	_fc.agp[1].enabled = true; // TODO: need logic when its OK to fuse OPH
 }
 
 void FusionController::update(Ekf &ekf)
