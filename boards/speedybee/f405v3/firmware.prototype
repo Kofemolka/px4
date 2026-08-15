@@ -4,7 +4,7 @@
     "description": "Navputer on the SpeedyBee F405 V3 board",
     "image": "",
     "build_time": 0,
-    "summary": "",
+    "summary": "speedybee/f405v3",
     "version": "0.1",
     "image_size": 0,
     "image_maxsize": 1032192,

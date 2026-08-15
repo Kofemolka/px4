@@ -1,6 +1,6 @@
 ############################################################################
 #
-#   Copyright (c) 2015-2023 PX4 Development Team. All rights reserved.
+#   Copyright (c) 2018 PX4 Development Team. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -29,59 +29,22 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 #
-#############################################################################
+############################################################################
 
-set(EKF_BASE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../ekf2)
-
-set(EKF_DERIVATION_SRC_DIR ${EKF_BASE_DIR}/EKF/python/ekf_derivation)
-
-set(EKF_GENERATED_FILES ${EKF_DERIVATION_SRC_DIR}/generated/state.h)
-set(EKF_GENERATED_DERIVATION_INCLUDE_PATH "${EKF_DERIVATION_SRC_DIR}/..")
-
-set(NAVPUTER_MODULE_PARAMS)
-set(NAVPUTER_LIBS)
-set(NAVPUTER_SRCS
-	navputer.cpp
-	navputer.hpp
-	mlat_aux.cpp
-	mlat_aux.hpp
-	motion_detector.hpp
-	motion_detector.cpp
-	copilot_lifecycle.hpp
-	copilot_lifecycle.cpp
-	fusion_controller.hpp
-	fusion_controller.cpp
-	elevation_initializer.hpp
-	elevation_initializer.cpp
+add_library(drivers_board
+	i2c.cpp
+	init.c
+	led.c
+	spi.cpp
+	timer_config.cpp
+	usb.c
 )
 
-px4_add_module(
-	MODULE modules__navputer
-	MAIN navputer
-	COMPILE_FLAGS
-		${MAX_CUSTOM_OPT_LEVEL}
-		-fno-associative-math
-		#-DDEBUG_BUILD
-		#-O0
-	INCLUDES
-		${EKF_BASE_DIR}
-		${EKF_BASE_DIR}/EKF
-		${EKF_GENERATED_DERIVATION_INCLUDE_PATH}
-	PRIORITY
-		"SCHED_PRIORITY_MAX - 18" # max priority below high priority WQ threads
-	STACK_MAX
-		3600
-	SRCS
-		${NAVPUTER_SRCS}
-		${EKF_GENERATED_FILES}
-
-	MODULE_CONFIG
-		module.yaml
-		${NAVPUTER_MODULE_PARAMS}
-
-	DEPENDS
-		${NAVPUTER_LIBS}
-		lat_lon_alt
-	UNITY_BUILD
-	)
-
+target_link_libraries(drivers_board
+	PRIVATE
+		arch_spi
+		drivers__led # drv_led_start
+		nuttx_arch # sdio
+		nuttx_drivers # sdio
+		px4_layer
+)

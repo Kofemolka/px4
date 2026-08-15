@@ -45,8 +45,13 @@ Sources:
 
 # Guide
 
+https://docs.px4.io/main/en/hardware/porting_guide_config
+
 ## Board definition
 
 boards/speedybee/f405v3/default.px4board
 
 What features/modules to include.
+
+# Vendor/Product
+1209:5741
