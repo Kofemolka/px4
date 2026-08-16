@@ -55,3 +55,50 @@ What features/modules to include.
 
 # Vendor/Product
 1209:5741
+
+## Serial port -> ttySx mapping
+
+NuttX assigns /dev/ttySx by walking a fixed-position array (USART1, USART2,
+USART3, UART4, UART5, USART6, ...) and numbering only the *enabled* ones in
+order, skipping disabled slots (gaps aren't reserved). So ttySx is NOT the
+same as the peripheral number - it depends on which ports are enabled in
+nuttx-config/nsh/defconfig.
+
+Source: arm_serialinit() in
+platforms/nuttx/NuttX/nuttx/arch/arm/src/stm32/stm32_serial.c
+
+Current board config (USART1/2/3/6 enabled, UART4/5 disabled):
+
+| Peripheral | ttySx  |
+|------------|--------|
+| USART1     | ttyS0  |
+| USART2     | ttyS1  |
+| USART3     | ttyS2  |
+| USART6     | ttyS3  |
+
+CONFIG_BOARD_SERIAL_* role assignments in default.px4board must match this
+table (re-check whenever defconfig's enabled UART/USART set changes).
+
+
+# Upload
+
+PX4 uploader needs valid PX4 bootloader to accept FW.
+
+Upload bootloader from similar board in DFU mode.
+
+Prepare:
+```bash
+sudo apt install dfu-util
+cd boards/speedybee/f405v3/bootloader/
+arm-none-eabi-objcopy -I ihex -O binary flywoo_gnf405_bl_15d91db.hex speedybee_bootloader.bin
+```
+
+Hold BOOT0 button and reset power. Then upload:
+```bash
+dfu-util -a 0 --dfuse-address 0x08000000 -D speedybee_bootloader.bin
+```
+
+After reboot you can upload FW normally:
+```bash
+make speedybee_f405v3_default upload
+```
