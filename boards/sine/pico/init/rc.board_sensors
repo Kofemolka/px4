@@ -1,0 +1,14 @@
+#!/bin/sh
+#
+# board specific sensors init
+#------------------------------------------------------------------------------
+
+board_adc start
+
+# try starting an bmi160 IMU on external SPI
+bmi160 start -S
+
+# try starting a bmp280 barometer on external SPI
+bmp581 start -S
+
+# TODO: magnetometer

@@ -1,0 +1,9 @@
+#!/bin/sh
+#
+# board specific MAVLink startup script.
+#------------------------------------------------------------------------------
+
+# MAVLink on the USB port shares /dev/ttyACM0 with the NSH console, so it's
+# not autostarted here - it would interleave binary MAVLink frames with the
+# console text. Start it manually when needed:
+#   mavlink start -d /dev/ttyACM0
