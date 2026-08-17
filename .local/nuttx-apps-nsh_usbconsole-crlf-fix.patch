@@ -1,0 +1,34 @@
+diff --git a/nshlib/nsh_usbconsole.c b/nshlib/nsh_usbconsole.c
+index 5ec2ac4c9..776587507 100644
+--- a/nshlib/nsh_usbconsole.c
++++ b/nshlib/nsh_usbconsole.c
+@@ -32,6 +32,7 @@
+ #include <fcntl.h>
+ #include <assert.h>
+ #include <debug.h>
++#include <termios.h>
+ 
+ #ifdef CONFIG_CDCACM
+ #  include <nuttx/usb/cdcacm.h>
+@@ -197,6 +198,21 @@ restart:
+     }
+   while (nlc < 3);
+ 
++  /* Enable \n -> \r\n output translation.  Unlike a real UART, the
++   * CDC/ACM device is not necessarily registered as the system console,
++   * so uart_register() may not have turned this on by default.
++   */
++
++  {
++    struct termios tio;
++
++    if (tcgetattr(fd, &tio) == 0)
++      {
++        tio.c_oflag |= (OPOST | ONLCR);
++        tcsetattr(fd, TCSANOW, &tio);
++      }
++  }
++
+   /* Configure standard I/O */
+ 
+   nsh_configstdio(fd);
