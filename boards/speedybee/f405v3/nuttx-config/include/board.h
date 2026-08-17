@@ -237,39 +237,14 @@
 
 /* Alternate function pin selections ************************************************/
 
-/* UART1:
- *
- * PA10 (RX) and PA9 (TX) are broken out on J5
- */
-
 #define GPIO_USART1_RX GPIO_USART1_RX_1
-#define GPIO_USART1_TX GPIO_USART1_TX_2
+#define GPIO_USART1_TX GPIO_USART1_TX_1
 
-/* USART3:
- *
- * PC10 (TX) and PC11 (RX) are broken out on J4
- *
- * However, this port is shared with SPI3 which contains the BMP280 and MAX7456
- *
- * The Silkscreen pin labeled SCL is TX
- *                           MISO is RX
- */
-//#define GPIO_USART3_RX	GPIO_USART3_RX_2
-//#define GPIO_USART3_TX	GPIO_USART3_TX_2
+#define GPIO_USART2_RX	GPIO_USART2_RX_1
+#define GPIO_USART2_TX	GPIO_USART2_TX_1
 
-/* UART4:
- *
- * PA0 (TX) -- Labeled RSSI on the silkscreen is only broken out on a test pad
- *             on the pro version. It's on a 2.54mm header on other versions
- * PA1 (RX) -- Motor 5 out
- */
-#define GPIO_UART4_RX	GPIO_UART4_RX_1
-#define GPIO_UART4_TX	GPIO_UART4_TX_1
-
-/* UART6:
- *
- * PC6 (TX) and PC7 (RX) are broken out on J10
- */
+#define GPIO_USART3_RX	GPIO_USART3_RX_2
+#define GPIO_USART3_TX	GPIO_USART3_TX_2
 
 #define GPIO_USART6_RX GPIO_USART6_RX_1
 #define GPIO_USART6_TX GPIO_USART6_TX_1
