@@ -89,6 +89,8 @@
 #include <uORB/topics/vehicle_air_data.h>
 #include <uORB/topics/vehicle_magnetometer.h>
 #include <uORB/topics/ranging_beacon.h>
+#include <uORB/topics/estimator_gps_status.h>
+#include <uORB/topics/sensor_gps.h>
 
 #include <uORB/topics/navput_attitude.h>
 #include <uORB/topics/navput_local_position.h>
@@ -176,6 +178,7 @@ private:
 	void UpdateMagSample(ekf2_timestamps_s &ekf2_timestamps);
 	void UpdateBaroSample(ekf2_timestamps_s &ekf2_timestamps);
 	void UpdateRangingBeaconSample(ekf2_timestamps_s &ekf2_timestamps);
+	void UpdateGpsSample(ekf2_timestamps_s &ekf2_timestamps);
 
 	void UpdateCalibration(const hrt_abstime &timestamp, InFlightCalibration &cal, const matrix::Vector3f &bias,
 			       const matrix::Vector3f &bias_variance, float bias_limit, bool bias_valid, bool learning_valid);
@@ -213,6 +216,9 @@ private:
 
 	// Beacons
 	uORB::Subscription _ranging_beacon_sub {ORB_ID(ranging_beacon)};
+
+	// GPS
+	uORB::Subscription _vehicle_gps_position_sub{ORB_ID(vehicle_gps_position)};
 
 	uORB::Publication<navput_attitude_s>           		_attitude_pub{ORB_ID(navput_attitude)};
 	uORB::Publication<navput_local_position_s>     		_local_position_pub{ORB_ID(navput_local_position)};
