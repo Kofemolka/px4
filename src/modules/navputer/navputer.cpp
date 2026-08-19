@@ -51,7 +51,24 @@ Navputer::Navputer(const px4::wq_config_t &config, bool replay_mode):
 	_param_npt_rngbc_ctrl(_params->ekf2_rngbc_ctrl),
 	_param_npt_rngbc_delay(_params->ekf2_rngbc_delay),
 	_param_npt_rngbc_noise(_params->ekf2_rngbc_noise),
-	_param_npt_rngbc_gate(_params->ekf2_rngbc_gate)
+	_param_npt_rngbc_gate(_params->ekf2_rngbc_gate),
+	// GNSS
+	_param_npt_gps_ctrl(_params->ekf2_gps_ctrl),
+	_param_ekf2_gps_mode(_params->ekf2_gps_mode),
+	_param_ekf2_gps_v_noise(_params->ekf2_gps_v_noise),
+	_param_ekf2_gps_p_noise(_params->ekf2_gps_p_noise),
+	_param_ekf2_gps_p_gate(_params->ekf2_gps_p_gate),
+	_param_ekf2_gps_v_gate(_params->ekf2_gps_v_gate),
+	_param_ekf2_gps_check(_params->ekf2_gps_check),
+	_param_ekf2_req_eph(_params->ekf2_req_eph),
+	_param_ekf2_req_epv(_params->ekf2_req_epv),
+	_param_ekf2_req_sacc(_params->ekf2_req_sacc),
+	_param_ekf2_req_nsats(_params->ekf2_req_nsats),
+	_param_ekf2_req_pdop(_params->ekf2_req_pdop),
+	_param_ekf2_req_hdrift(_params->ekf2_req_hdrift),
+	_param_ekf2_req_vdrift(_params->ekf2_req_vdrift),
+	_param_ekf2_req_fix(_params->ekf2_req_fix),
+	_param_ekf2_gsf_tas(_params->ekf2_gsf_tas)
 {
 	AdvertiseTopics();
 }
