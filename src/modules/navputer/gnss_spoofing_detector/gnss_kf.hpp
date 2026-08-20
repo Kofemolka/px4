@@ -59,17 +59,20 @@ public:
 		matrix::Vector3f vel_var;
 	};
 public:
+	using Matrix6f = matrix::SquareMatrix<float, 6>;
+	using Vector6f = matrix::Vector<float, 6>;
+
 	void reset();
-	void process(const Measurement &sample);
+	bool process(const Measurement &sample);
+
+	const Vector6f& state() const;
+	const Matrix6f& covariance() const;
 private:
 	bool isMeasurementValid(const Measurement& sample);
 	void initialize(const Measurement& sample);
 	bool calcTimeDelta(uint64_t sample_ts_us, float& dt);
 	void predict(const float dt);
 	bool update(const Measurement& sample);
-
-	using Matrix6f = matrix::SquareMatrix<float, 6>;
-	using Vector6f = matrix::Vector<float, 6>;
 
 	Matrix6f buildMotionMatrixF(const float dt);
 	Matrix6f buildProcessNoiseMatrixQ(const float dt);

@@ -42,32 +42,64 @@
 #define GNSS_ANALYZER_HPP
 
 #include <ekf.h>
-#include <ringbuffer/Ringbuffer.hpp>
 
+#include "history_ring_buffer.hpp"
 #include "gnss_kf.hpp"
 
 /*
- * Uninitialized -> Spoofed <-> Healthy
+ * Uninitialized <-> Spoofed
+ * Uninitialized <-> Healthy
+ * Healthy <-> Spoofed
  */
 
 enum class GnssSpoofingState
 {
+	Uninitialized,
 	Healthy,
 	Spoofed
 };
+
+namespace GnssAnalyzerConstants
+{
+constexpr size_t kHighFreqIMUQueueSize = 512;
+constexpr size_t kLowFreqGPSQueueSize = 128;
+} // GnssAnalyzerConstants
 
 class GnssAnalyzer
 {
 public:
 	GnssSpoofingState state() const;
 	void reset();
-	void pushIMU(const ImmediateDeltaVelocityEarth &sample);
+	void pushIMU(const DeltaVelocityEarth &sample);
 	void pushGnss(const GnssKalmanFilter::Measurement &sample);
 private:
-	GnssSpoofingState _state{GnssSpoofingState::Healthy};
+	struct VelocityEndpoint
+	{
+		uint64_t time_us{0};
+		matrix::Vector3f gnss_velocity_ned{};
+		matrix::Vector3f imu_cumulative_delta_velocity_ned{};
+	};
 
-	//Ringbuffer<ImmediateDeltaVelocityEarth> _imu_queue;
+	struct IMUCumulativeVelocityEndpoint
+	{
+		uint64_t time_us{0};
+		matrix::Vector3f cumulative_velocity{};
+	};
+private:
+	matrix::Vector3f lerp(
+		const IMUCumulativeVelocityEndpoint& a,
+		const IMUCumulativeVelocityEndpoint& b,
+		uint64_t target_time_us);
+private:
+	GnssSpoofingState _state{GnssSpoofingState::Uninitialized};
 	GnssKalmanFilter _gnss_kf;
+
+	HistoryRingBuffer<IMUCumulativeVelocityEndpoint,
+		GnssAnalyzerConstants::kHighFreqIMUQueueSize> _high_freq_imu_history;
+	HistoryRingBuffer<VelocityEndpoint,
+		GnssAnalyzerConstants::kLowFreqGPSQueueSize> _low_freq_gps_history;
+
+	matrix::Vector3f _imu_cumulative_velocity_ned{};
 };
 
 #endif

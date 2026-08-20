@@ -59,6 +59,7 @@ set(NAVPUTER_SRCS
 	gnss_spoofing_detector/gnss_analyzer.cpp
 	gnss_spoofing_detector/gnss_kf.hpp
 	gnss_spoofing_detector/gnss_kf.cpp
+	gnss_spoofing_detector/history_ring_buffer.hpp
 )
 
 px4_add_module(

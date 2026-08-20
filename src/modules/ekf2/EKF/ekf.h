@@ -302,7 +302,7 @@ public:
 	float getGravityMss() const { return _gravity; }
 
 	// Latest output-predictor IMU velocity increment, corrected and expressed in NED.
-	ImmediateDeltaVelocityEarth immediateLatestDeltaVelocity() const;
+	DeltaVelocityEarth immediateLatestDeltaVelocity() const;
 
 #if defined(CONFIG_EKF2_MAGNETOMETER)
 	const Vector3f &getMagEarthField() const { return _state.mag_I; }

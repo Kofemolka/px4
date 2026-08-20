@@ -216,7 +216,7 @@ void OutputPredictor::calculateOutputStates(const uint64_t time_us, const Vector
 	delta_vel_earth(2) += _gravity * delta_velocity_dt;
 
 	_latest_delta_velocity = {
-		.timestamp_sample = time_us,
+		.time_us = time_us,
 		.delta_velocity_ned = delta_vel_earth,
 		.dt = delta_velocity_dt
 	};
@@ -270,7 +270,7 @@ void OutputPredictor::calculateOutputStates(const uint64_t time_us, const Vector
 	_delta_angle_sum_dt += delta_angle_dt;
 }
 
-ImmediateDeltaVelocityEarth OutputPredictor::immediateLatestDeltaVelocity() const
+DeltaVelocityEarth OutputPredictor::immediateLatestDeltaVelocity() const
 {
 	return _latest_delta_velocity;
 }

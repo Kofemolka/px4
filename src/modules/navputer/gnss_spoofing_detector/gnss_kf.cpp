@@ -100,7 +100,14 @@ bool GnssKalmanFilter::calcTimeDelta(uint64_t sample_ts_us, float& dt)
 bool GnssKalmanFilter::isMeasurementValid(const Measurement& sample)
 {
 	const bool valid =
-		PX4_ISFINITE(sample.pos_var(0))
+		PX4_ISFINITE(sample.pos_ned(0))
+		&& PX4_ISFINITE(sample.pos_ned(1))
+		&& PX4_ISFINITE(sample.pos_ned(2))
+		&& PX4_ISFINITE(sample.vel_ned(0))
+		&& PX4_ISFINITE(sample.vel_ned(1))
+		&& PX4_ISFINITE(sample.vel_ned(2))
+
+		&& PX4_ISFINITE(sample.pos_var(0))
 		&& PX4_ISFINITE(sample.pos_var(1))
 		&& PX4_ISFINITE(sample.pos_var(2))
 		&& PX4_ISFINITE(sample.vel_var(0))
@@ -109,24 +116,24 @@ bool GnssKalmanFilter::isMeasurementValid(const Measurement& sample)
 	return valid;
 }
 
-void GnssKalmanFilter::process(const Measurement& sample)
+bool GnssKalmanFilter::process(const Measurement& sample)
 {
 	if (!isMeasurementValid(sample))
 	{
 		PX4_WARN("GnssKalmanFilter: Skipping invalid Gnss measurement");
-		return;
+		return false;
 	}
 
 	if (!_initialized)
 	{
 		initialize(sample);
-		return;
+		return true;
 	}
 
 	float dt = 0;
 	if (!calcTimeDelta(sample.time_us, dt))
 	{
-		return;
+		return false;
 	}
 	
 	predict(dt);
@@ -136,6 +143,18 @@ void GnssKalmanFilter::process(const Measurement& sample)
 	{
 		_time_us = sample.time_us;
 	}
+
+	return successful_update;
+}
+
+const GnssKalmanFilter::Vector6f& GnssKalmanFilter::state() const
+{
+	return _state;
+}
+
+const GnssKalmanFilter::Matrix6f& GnssKalmanFilter::covariance() const
+{
+	return _P;
 }
 
 void GnssKalmanFilter::reset()

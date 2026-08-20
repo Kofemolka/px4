@@ -442,7 +442,7 @@ static void printRingBuffer(const char *name, TimestampedRingBuffer<T> *rb)
 	}
 }
 
-ImmediateDeltaVelocityEarth Ekf::immediateLatestDeltaVelocity() const
+DeltaVelocityEarth Ekf::immediateLatestDeltaVelocity() const
 {
 	return _output_predictor.immediateLatestDeltaVelocity();
 }

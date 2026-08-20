@@ -102,7 +102,7 @@ void GnssSpoofingDetector::maybeFuseGnss()
 	}
 }
 
-void GnssSpoofingDetector::update(const ImmediateDeltaVelocityEarth &imu_ned)
+void GnssSpoofingDetector::update(const DeltaVelocityEarth &imu_ned)
 {
 	maybeUpdateOrigin();
 

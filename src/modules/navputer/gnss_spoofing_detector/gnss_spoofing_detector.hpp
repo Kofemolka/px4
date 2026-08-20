@@ -55,7 +55,7 @@
 class GnssSpoofingDetector
 {
 public:
-	void update(const ImmediateDeltaVelocityEarth &imu_ned);
+	void update(const DeltaVelocityEarth &imu_ned);
 	GnssSpoofingState state() const;
 private:
 	void maybeUpdateOrigin();

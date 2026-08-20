@@ -40,6 +40,8 @@
 
 #include "gnss_analyzer.hpp"
 
+#include <px4_platform_common/log.h>
+
 GnssSpoofingState GnssAnalyzer::state() const
 {
 	return _state;
@@ -48,16 +50,81 @@ GnssSpoofingState GnssAnalyzer::state() const
 void GnssAnalyzer::reset()
 {
 	_gnss_kf.reset();
-	_state = GnssSpoofingState::Healthy;
-	// TODO: clear imu queue
-	// TODO: clear gps history
+	_high_freq_imu_history.reset();
+	_low_freq_gps_history.reset();
+	_imu_cumulative_velocity_ned.setZero();
+
+	_state = GnssSpoofingState::Uninitialized;
 }
 
-void GnssAnalyzer::pushIMU(const ImmediateDeltaVelocityEarth &sample)
+void GnssAnalyzer::pushIMU(const DeltaVelocityEarth &sample)
 {
+	if (!_high_freq_imu_history.empty() && _high_freq_imu_history.newest().time_us >= sample.time_us)
+	{
+		//PX4_WARN("GnssAnalyzer: dropping IMU sample with the time_us <= latest_saved_imu.time_us");
+		return;
+	}
+
+	_imu_cumulative_velocity_ned += sample.delta_velocity_ned;
+
+	[[maybe_unused]]
+	auto res = _high_freq_imu_history.push(IMUCumulativeVelocityEndpoint{
+			.time_us = sample.time_us,
+			.cumulative_velocity = _imu_cumulative_velocity_ned
+		});
+}
+
+matrix::Vector3f GnssAnalyzer::lerp(
+	const IMUCumulativeVelocityEndpoint& a,
+	const IMUCumulativeVelocityEndpoint& b,
+	uint64_t target_time_us)
+{
+	if (a.time_us == b.time_us)
+	{
+		return a.cumulative_velocity;
+	}
+
+	const float fraction =
+		static_cast<float>(target_time_us - a.time_us)
+		/
+		static_cast<float>(b.time_us - a.time_us);
+
+	return a.cumulative_velocity + (b.cumulative_velocity - a.cumulative_velocity) * fraction;
 }
 
 void GnssAnalyzer::pushGnss(const GnssKalmanFilter::Measurement &sample)
 {
-	_gnss_kf.process(sample);
+	const auto res = _gnss_kf.process(sample);
+
+	if (!res)
+	{
+		PX4_WARN("GnssAnalyzer: failed to process Gnss sample in KF. Skipping.");
+		return;
+	}
+
+	// find the IMU samples near the current Gnss timestamp for further comparison
+	const auto bracket_indices = _high_freq_imu_history.findBracket(sample.time_us);
+	if (!bracket_indices)
+	{
+		PX4_WARN("GnssAnalyzer: cannot find the nearby IMU samples for this Gnss sample.");
+		return;
+	}
+
+	const auto& before = _high_freq_imu_history.atOldestOffset(bracket_indices->before);
+	const auto& after = _high_freq_imu_history.atOldestOffset(bracket_indices->after);
+	const auto imu_cumulative_at_gps = lerp(before, after, sample.time_us);
+
+	// get the latest filtered gnss velocity
+	const auto& state = _gnss_kf.state();
+	matrix::Vector3f filtered_gnss_vel{};
+	filtered_gnss_vel(0) = state(3);
+	filtered_gnss_vel(1) = state(4);
+	filtered_gnss_vel(2) = state(5);
+
+	// pushing cumulative_imu and filtered_gnss velocities as a new checkpoint into the queue
+	_low_freq_gps_history.push(VelocityEndpoint{
+			.time_us = sample.time_us,
+			.gnss_velocity_ned = filtered_gnss_vel,
+			.imu_cumulative_delta_velocity_ned = imu_cumulative_at_gps
+		});
 }
