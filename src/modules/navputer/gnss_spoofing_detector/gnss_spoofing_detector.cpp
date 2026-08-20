@@ -1,0 +1,117 @@
+/****************************************************************************
+ *
+ *   Copyright (c) 2015-2023 PX4 Development Team. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in
+ *    the documentation and/or other materials provided with the
+ *    distribution.
+ * 3. Neither the name PX4 nor the names of its contributors may be
+ *    used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
+ * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
+ * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ *
+ ****************************************************************************/
+
+/**
+ * @file gnss_spoofing_detector.cpp
+ * Implementation of the GnssSpoofingDetector.
+ *
+ * @author
+ */
+
+#include "gnss_spoofing_detector.hpp"
+
+void GnssSpoofingDetector::maybeUpdateOrigin()
+{
+	navput_local_position_s local_position{};
+
+	if (_local_position_sub.update(&local_position))
+	{
+		const bool origin_valid = local_position.xy_global && local_position.z_global
+					  && PX4_ISFINITE(local_position.ref_lat)
+					  && PX4_ISFINITE(local_position.ref_lon)
+					  && PX4_ISFINITE(local_position.ref_alt);
+
+		// invalidate origin if it is not valid
+		if (!origin_valid)
+		{
+			if (this->_origin_valid)
+			{
+				_analyzer.reset();
+			}
+			this->_origin_valid = false;
+		}
+		// update the origin if it is valid
+		else if (!_origin_valid || local_position.ref_timestamp != _origin_timestamp)
+		{
+			_origin_projection.initReference(
+				local_position.ref_lat,
+				local_position.ref_lon,
+				local_position.ref_timestamp);
+
+			_origin_alt = local_position.ref_alt;
+			_origin_timestamp = local_position.ref_timestamp;
+			_origin_valid = true;
+			_analyzer.reset();
+		}
+	}
+}
+
+void GnssSpoofingDetector::maybeFuseGnss()
+{
+	sensor_gps_s gps{};
+	const bool gps_updated = _gps_sub.update(&gps);
+
+	if (_origin_valid && gps_updated && gps.vel_ned_valid
+	    && PX4_ISFINITE(gps.latitude_deg)
+	    && PX4_ISFINITE(gps.longitude_deg)
+	    && PX4_ISFINITE(gps.altitude_msl_m))
+	{
+		const matrix::Vector2f gps_pos_ne = _origin_projection.project(gps.latitude_deg, gps.longitude_deg);
+		const uint64_t gps_time_us = gps.timestamp_sample > 0 ? gps.timestamp_sample : gps.timestamp;
+		const float gps_pos_down = _origin_alt - static_cast<float>(gps.altitude_msl_m);
+
+		_analyzer.pushGnss({
+			.time_us = gps_time_us,
+			.pos_ned = {gps_pos_ne(0), gps_pos_ne(1), gps_pos_down},
+			.vel_ned = {gps.vel_n_m_s, gps.vel_e_m_s, gps.vel_d_m_s},
+			.pos_var = {gps.eph * gps.eph, gps.eph * gps.eph, gps.epv * gps.epv},
+			.vel_var = {gps.s_variance_m_s * gps.s_variance_m_s,
+				    gps.s_variance_m_s * gps.s_variance_m_s,
+				    gps.s_variance_m_s * gps.s_variance_m_s}
+		});
+	}
+}
+
+void GnssSpoofingDetector::update(const ImmediateDeltaVelocityEarth &imu_ned)
+{
+	maybeUpdateOrigin();
+
+	_analyzer.pushIMU(imu_ned);
+	maybeFuseGnss();
+}
+
+GnssSpoofingState GnssSpoofingDetector::state() const
+{
+	return _analyzer.state();
+}
+

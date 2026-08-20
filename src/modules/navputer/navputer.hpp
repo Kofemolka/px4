@@ -101,6 +101,7 @@
 #include "motion_detector.hpp"
 #include "copilot_lifecycle.hpp"
 #include "elevation_initializer.hpp"
+#include "gnss_spoofing_detector/gnss_spoofing_detector.hpp"
 
 #include "mlat_aux.hpp"
 #include "fusion_controller.hpp"
@@ -248,6 +249,7 @@ private:
 	MotionDetector _motion_detector;
 	CopilotLifecycle _copilot_lifecycle;
 	ElevationInitializer _elevation_initializer;
+	GnssSpoofingDetector _gnss_spoofing_detector;
 
 	parameters *_params;
 

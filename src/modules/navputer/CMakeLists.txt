@@ -53,6 +53,12 @@ set(NAVPUTER_SRCS
 	fusion_controller.cpp
 	elevation_initializer.hpp
 	elevation_initializer.cpp
+	gnss_spoofing_detector/gnss_spoofing_detector.hpp
+	gnss_spoofing_detector/gnss_spoofing_detector.cpp
+	gnss_spoofing_detector/gnss_analyzer.hpp
+	gnss_spoofing_detector/gnss_analyzer.cpp
+	gnss_spoofing_detector/gnss_kf.hpp
+	gnss_spoofing_detector/gnss_kf.cpp
 )
 
 px4_add_module(

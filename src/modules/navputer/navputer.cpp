@@ -223,6 +223,7 @@ void Navputer::Run()
 
 		// push imu data into estimator
 		_ekf.setIMUData(imu_sample_new);
+		_gnss_spoofing_detector.update(_ekf.immediateLatestDeltaVelocity());
 
 		UpdateMotionDetector(imu_sample_new);
 
