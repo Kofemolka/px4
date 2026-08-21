@@ -738,7 +738,10 @@ void Navputer::UpdateGpsSample(ekf2_timestamps_s &ekf2_timestamps)
 					     vehicle_gps_position.antenna_offset_z),
 		};
 
-		_ekf.setGpsData(gnss_sample);
+		if (_gnss_spoofing_detector.state() == GnssSpoofingState::Trusted)
+		{
+			_ekf.setGpsData(gnss_sample);
+		}
 
 		// TODO: to look closer and decide whether we should reuse it
 		//const float geoid_height = altitude_ellipsoid - altitude_amsl;

@@ -42,19 +42,43 @@
 
 #include <px4_platform_common/log.h>
 
+namespace
+{
+constexpr float kVelWindowDurationS = 2.f; // 2 second window
+constexpr float kOldestPossibleSampleToCompareS = 2.5f; // 2.5 seconds
+constexpr float kVelSafeResidual = 0.4; // m/s
+constexpr float kVelSevereResidual = 1.2; // m/s
+
+constexpr float kSafeSuspicionDecreasePerWindow = 0.1f;
+constexpr float kMaxSuspicionIncreasePerWindow = 0.4f;
+
+constexpr float kVelSpoofThreshold = 0.8f;
+constexpr float kVelUnspoofThreshold = 0.2f;
+} // namespace
+
 GnssSpoofingState GnssAnalyzer::state() const
 {
 	return _state;
 }
 
-void GnssAnalyzer::reset()
+void GnssAnalyzer::reset(bool origin_valid)
 {
 	_gnss_kf.reset();
 	_high_freq_imu_history.reset();
 	_low_freq_gps_history.reset();
 	_imu_cumulative_velocity_ned.setZero();
+	_last_vel_analysis_time_us = 0;
 
-	_state = GnssSpoofingState::Uninitialized;
+	if (origin_valid)
+	{
+		_velocity_suspicion = kVelSpoofThreshold;
+		_state = GnssSpoofingState::Untrusted;
+	}
+	else
+	{
+		_velocity_suspicion = 0.f;
+		_state = GnssSpoofingState::NoOrigin;
+	}
 }
 
 void GnssAnalyzer::pushIMU(const DeltaVelocityEarth &sample)
@@ -127,4 +151,83 @@ void GnssAnalyzer::pushGnss(const GnssKalmanFilter::Measurement &sample)
 			.gnss_velocity_ned = filtered_gnss_vel,
 			.imu_cumulative_delta_velocity_ned = imu_cumulative_at_gps
 		});
+
+	analyzeVelAnomalies();
+}
+
+
+void GnssAnalyzer::analyzeVelAnomalies()
+{
+	if (_state == GnssSpoofingState::NoOrigin || _low_freq_gps_history.empty())
+	{
+		return;
+	}
+
+	const auto& new_sample = _low_freq_gps_history.newest();
+
+	// first time call after reset()
+	if (_last_vel_analysis_time_us == 0)
+	{
+		_last_vel_analysis_time_us = new_sample.time_us;
+		return;
+	}
+
+	if (new_sample.time_us <= static_cast<uint64_t>(kVelWindowDurationS * 1e+6f))
+	{
+		return;
+	}
+
+	const auto& old_idx_opt = _low_freq_gps_history.findLastAtOrBefore(new_sample.time_us - static_cast<uint64_t>(kVelWindowDurationS * 1e+6f));
+
+	// not enough samples yet
+	if (!old_idx_opt)
+	{
+		return;
+	}
+
+	const auto& old_sample = _low_freq_gps_history.atOldestOffset(*old_idx_opt);
+
+	// the old sample is too old to compare. Wait for another sample that is around window_duration old
+	if ((new_sample.time_us - old_sample.time_us) > static_cast<uint64_t>(kOldestPossibleSampleToCompareS * 1e+6f))
+	{
+		return;
+	}
+
+	const float score_dt = (new_sample.time_us - _last_vel_analysis_time_us) * 1e-6f;
+	const float window_fraction = math::constrain(score_dt / kVelWindowDurationS, 0.f, 1.f);
+
+	const matrix::Vector3f gnss_delta_velocity = new_sample.gnss_velocity_ned - old_sample.gnss_velocity_ned;
+	const matrix::Vector3f imu_delta_velocity = new_sample.imu_cumulative_delta_velocity_ned - old_sample.imu_cumulative_delta_velocity_ned;
+
+	const matrix::Vector3f residual = gnss_delta_velocity - imu_delta_velocity;
+	const float horizontal_residual = sqrtf(residual(0) * residual(0) + residual(1) * residual(1));
+
+	float suspicion_delta = 0;
+
+	if (horizontal_residual <= kVelSafeResidual)
+	{
+		suspicion_delta = -kSafeSuspicionDecreasePerWindow * window_fraction;
+	}
+	else
+	{
+		const float severity_weight = math::constrain(
+			(horizontal_residual - kVelSafeResidual) / (kVelSevereResidual - kVelSafeResidual),
+			0.f,
+			1.f);
+		suspicion_delta = kMaxSuspicionIncreasePerWindow * severity_weight * window_fraction;
+	}
+
+	_velocity_suspicion = math::constrain(_velocity_suspicion + suspicion_delta, 0.f, 1.f);
+
+	// Hysteresis
+	if (_velocity_suspicion >= kVelSpoofThreshold)
+	{
+		_state = GnssSpoofingState::Untrusted;
+	}
+	else if (_velocity_suspicion <= kVelUnspoofThreshold)
+	{
+		_state = GnssSpoofingState::Trusted;
+	}
+
+	_last_vel_analysis_time_us = new_sample.time_us;
 }

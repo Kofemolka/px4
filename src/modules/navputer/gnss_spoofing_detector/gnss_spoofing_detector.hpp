@@ -64,9 +64,9 @@ private:
 	GnssAnalyzer _analyzer;
 
 	// origin fields
+	double _origin_lat_deg{NAN};
+	double _origin_lon_deg{NAN};
 	MapProjection _origin_projection{};
-	float _origin_alt{NAN};
-	uint64_t _origin_timestamp{0};
 	bool _origin_valid{false};
 
 	// subscriptions

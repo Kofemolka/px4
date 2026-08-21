@@ -40,38 +40,48 @@
 
 #include "gnss_spoofing_detector.hpp"
 
+#include <matrix/helper_functions.hpp>
+
+namespace
+{
+constexpr double kOriginEpsilon = 1e-8;
+} // namespace
+
 void GnssSpoofingDetector::maybeUpdateOrigin()
 {
 	navput_local_position_s local_position{};
 
+	// Here we check only horizontal changes without an altitude
 	if (_local_position_sub.update(&local_position))
 	{
-		const bool origin_valid = local_position.xy_global && local_position.z_global
+		const bool new_origin_valid = local_position.xy_global
 					  && PX4_ISFINITE(local_position.ref_lat)
-					  && PX4_ISFINITE(local_position.ref_lon)
-					  && PX4_ISFINITE(local_position.ref_alt);
+					  && PX4_ISFINITE(local_position.ref_lon);
 
 		// invalidate origin if it is not valid
-		if (!origin_valid)
+		if (!new_origin_valid)
 		{
-			if (this->_origin_valid)
+			if (_origin_valid)
 			{
-				_analyzer.reset();
+				_analyzer.reset(new_origin_valid);
 			}
-			this->_origin_valid = false;
+			_origin_valid = false;
 		}
 		// update the origin if it is valid
-		else if (!_origin_valid || local_position.ref_timestamp != _origin_timestamp)
+		else if (!_origin_valid
+				|| !matrix::isEqualF(local_position.ref_lat, _origin_lat_deg, kOriginEpsilon)
+				|| !matrix::isEqualF(local_position.ref_lon, _origin_lon_deg, kOriginEpsilon))
 		{
 			_origin_projection.initReference(
 				local_position.ref_lat,
 				local_position.ref_lon,
 				local_position.ref_timestamp);
 
-			_origin_alt = local_position.ref_alt;
-			_origin_timestamp = local_position.ref_timestamp;
+			_origin_lat_deg = local_position.ref_lat;
+			_origin_lon_deg = local_position.ref_lon;
 			_origin_valid = true;
-			_analyzer.reset();
+
+			_analyzer.reset(new_origin_valid);
 		}
 	}
 }
@@ -88,11 +98,11 @@ void GnssSpoofingDetector::maybeFuseGnss()
 	{
 		const matrix::Vector2f gps_pos_ne = _origin_projection.project(gps.latitude_deg, gps.longitude_deg);
 		const uint64_t gps_time_us = gps.timestamp_sample > 0 ? gps.timestamp_sample : gps.timestamp;
-		const float gps_pos_down = _origin_alt - static_cast<float>(gps.altitude_msl_m);
+		const float gps_pos_down_msl = -static_cast<float>(gps.altitude_msl_m);
 
 		_analyzer.pushGnss({
 			.time_us = gps_time_us,
-			.pos_ned = {gps_pos_ne(0), gps_pos_ne(1), gps_pos_down},
+			.pos_ned = {gps_pos_ne(0), gps_pos_ne(1), gps_pos_down_msl},
 			.vel_ned = {gps.vel_n_m_s, gps.vel_e_m_s, gps.vel_d_m_s},
 			.pos_var = {gps.eph * gps.eph, gps.eph * gps.eph, gps.epv * gps.epv},
 			.vel_var = {gps.s_variance_m_s * gps.s_variance_m_s,

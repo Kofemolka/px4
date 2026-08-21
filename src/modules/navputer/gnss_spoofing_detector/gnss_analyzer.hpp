@@ -54,9 +54,9 @@
 
 enum class GnssSpoofingState
 {
-	Uninitialized,
-	Healthy,
-	Spoofed
+	NoOrigin,
+	Trusted,
+	Untrusted
 };
 
 namespace GnssAnalyzerConstants
@@ -69,7 +69,7 @@ class GnssAnalyzer
 {
 public:
 	GnssSpoofingState state() const;
-	void reset();
+	void reset(bool origin_valid);
 	void pushIMU(const DeltaVelocityEarth &sample);
 	void pushGnss(const GnssKalmanFilter::Measurement &sample);
 private:
@@ -90,8 +90,9 @@ private:
 		const IMUCumulativeVelocityEndpoint& a,
 		const IMUCumulativeVelocityEndpoint& b,
 		uint64_t target_time_us);
+	void analyzeVelAnomalies();
 private:
-	GnssSpoofingState _state{GnssSpoofingState::Uninitialized};
+	GnssSpoofingState _state{GnssSpoofingState::NoOrigin};
 	GnssKalmanFilter _gnss_kf;
 
 	HistoryRingBuffer<IMUCumulativeVelocityEndpoint,
@@ -100,6 +101,9 @@ private:
 		GnssAnalyzerConstants::kLowFreqGPSQueueSize> _low_freq_gps_history;
 
 	matrix::Vector3f _imu_cumulative_velocity_ned{};
+
+	uint64_t _last_vel_analysis_time_us{0};
+	float _velocity_suspicion{0};
 };
 
 #endif
