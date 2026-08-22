@@ -41,19 +41,28 @@
 #include "gnss_analyzer.hpp"
 
 #include <px4_platform_common/log.h>
+#include <matrix/Vector.hpp>
 
 namespace
 {
 constexpr float kVelWindowDurationS = 2.f; // 2 second window
 constexpr float kOldestPossibleSampleToCompareS = 2.5f; // 2.5 seconds
-constexpr float kVelSafeResidual = 0.4; // m/s
-constexpr float kVelSevereResidual = 1.2; // m/s
+constexpr float kVelSafeError = 0.4; // m/s
+constexpr float kVelSevereError = 1.2; // m/s
 
 constexpr float kSafeSuspicionDecreasePerWindow = 0.1f;
 constexpr float kMaxSuspicionIncreasePerWindow = 0.4f;
 
-constexpr float kVelSpoofThreshold = 0.8f;
-constexpr float kVelUnspoofThreshold = 0.2f;
+constexpr float kSpoofThreshold = 0.8f;
+constexpr float kUnspoofThreshold = 0.2f;
+
+constexpr float kPosSafeNormalizedError = 2.5f;    // sigma
+constexpr float kPosSevereNormalizedError = 5.f; // sigma
+
+constexpr float kSafePositionSuspicionDecrease = 0.1f;
+constexpr float kMaxPositionSuspicionIncrease = 0.4f;
+
+constexpr uint64_t kPosMaxGnssInterpolationGapUs = 250'000;
 } // namespace
 
 GnssSpoofingState GnssAnalyzer::state() const
@@ -65,18 +74,20 @@ void GnssAnalyzer::reset(bool origin_valid)
 {
 	_gnss_kf.reset();
 	_high_freq_imu_history.reset();
-	_low_freq_gps_history.reset();
+	_gnss_endpoint_history.reset();
+	_trusted_position_history.reset();
 	_imu_cumulative_velocity_ned.setZero();
 	_last_vel_analysis_time_us = 0;
+	_last_pos_analysis_time_us = 0;
 
 	if (origin_valid)
 	{
-		_velocity_suspicion = kVelSpoofThreshold;
+		_velocity_suspicion = kSpoofThreshold;
+		_position_suspicion = kSpoofThreshold;
 		_state = GnssSpoofingState::Untrusted;
 	}
 	else
 	{
-		_velocity_suspicion = 0.f;
 		_state = GnssSpoofingState::NoOrigin;
 	}
 }
@@ -98,22 +109,28 @@ void GnssAnalyzer::pushIMU(const DeltaVelocityEarth &sample)
 		});
 }
 
-matrix::Vector3f GnssAnalyzer::lerp(
-	const IMUCumulativeVelocityEndpoint& a,
-	const IMUCumulativeVelocityEndpoint& b,
+void GnssAnalyzer::pushTrustedPosition(const TrustedPositionSample &sample)
+{
+	_trusted_position_history.push(sample);
+	analyzePosAnomalies();
+}
+
+template<typename T, size_t Size>
+matrix::Vector<T, Size> lerp(
+	const matrix::Vector<T, Size> &before,
+	const matrix::Vector<T, Size> &after,
+	uint64_t before_time_us,
+	uint64_t after_time_us,
 	uint64_t target_time_us)
 {
-	if (a.time_us == b.time_us)
+	if (before_time_us == after_time_us)
 	{
-		return a.cumulative_velocity;
+		return before;
 	}
 
-	const float fraction =
-		static_cast<float>(target_time_us - a.time_us)
-		/
-		static_cast<float>(b.time_us - a.time_us);
+	const float fraction = static_cast<float>(target_time_us - before_time_us) / static_cast<float>(after_time_us - before_time_us);
 
-	return a.cumulative_velocity + (b.cumulative_velocity - a.cumulative_velocity) * fraction;
+	return before + (after - before) * fraction;
 }
 
 void GnssAnalyzer::pushGnss(const GnssKalmanFilter::Measurement &sample)
@@ -136,34 +153,59 @@ void GnssAnalyzer::pushGnss(const GnssKalmanFilter::Measurement &sample)
 
 	const auto& before = _high_freq_imu_history.atOldestOffset(bracket_indices->before);
 	const auto& after = _high_freq_imu_history.atOldestOffset(bracket_indices->after);
-	const auto imu_cumulative_at_gps = lerp(before, after, sample.time_us);
+	const auto imu_cumulative_at_gps = lerp<float, 3>(before.cumulative_velocity, after.cumulative_velocity, before.time_us, after.time_us, sample.time_us);
 
 	// get the latest filtered gnss velocity
 	const auto& state = _gnss_kf.state();
-	matrix::Vector3f filtered_gnss_vel{};
-	filtered_gnss_vel(0) = state(3);
-	filtered_gnss_vel(1) = state(4);
-	filtered_gnss_vel(2) = state(5);
+	matrix::Vector3f filtered_gnss_pos{
+		state(0),
+		state(1),
+		state(2)
+	};
+	matrix::Vector3f filtered_gnss_vel{
+		state(3),
+		state(4),
+		state(5)
+	};
 
-	// pushing cumulative_imu and filtered_gnss velocities as a new checkpoint into the queue
-	_low_freq_gps_history.push(VelocityEndpoint{
+	const auto& P = _gnss_kf.covariance();
+
+	_gnss_endpoint_history.push(GnssEndpoint{
 			.time_us = sample.time_us,
+			.gnss_position_ned = filtered_gnss_pos,
+			.gnss_position_ned_variance = {P(0, 0), P(1, 1), P(2, 2)},
 			.gnss_velocity_ned = filtered_gnss_vel,
 			.imu_cumulative_delta_velocity_ned = imu_cumulative_at_gps
 		});
 
 	analyzeVelAnomalies();
+	analyzePosAnomalies();
 }
 
+void GnssAnalyzer::recalculateState()
+{
+	// Hysteresis
+	const auto total_suspicion = math::max(_velocity_suspicion, _position_suspicion);
+
+	if (total_suspicion >= kSpoofThreshold)
+	{
+		_state = GnssSpoofingState::Untrusted;
+	}
+	else if (total_suspicion <= kUnspoofThreshold)
+	{
+		_state = GnssSpoofingState::Trusted;
+	}
+
+}
 
 void GnssAnalyzer::analyzeVelAnomalies()
 {
-	if (_state == GnssSpoofingState::NoOrigin || _low_freq_gps_history.empty())
+	if (_state == GnssSpoofingState::NoOrigin || _gnss_endpoint_history.empty())
 	{
 		return;
 	}
 
-	const auto& new_sample = _low_freq_gps_history.newest();
+	const auto& new_sample = _gnss_endpoint_history.newest();
 
 	// first time call after reset()
 	if (_last_vel_analysis_time_us == 0)
@@ -177,7 +219,7 @@ void GnssAnalyzer::analyzeVelAnomalies()
 		return;
 	}
 
-	const auto& old_idx_opt = _low_freq_gps_history.findLastAtOrBefore(new_sample.time_us - static_cast<uint64_t>(kVelWindowDurationS * 1e+6f));
+	const auto& old_idx_opt = _gnss_endpoint_history.findLastAtOrBefore(new_sample.time_us - static_cast<uint64_t>(kVelWindowDurationS * 1e+6f));
 
 	// not enough samples yet
 	if (!old_idx_opt)
@@ -185,7 +227,7 @@ void GnssAnalyzer::analyzeVelAnomalies()
 		return;
 	}
 
-	const auto& old_sample = _low_freq_gps_history.atOldestOffset(*old_idx_opt);
+	const auto& old_sample = _gnss_endpoint_history.atOldestOffset(*old_idx_opt);
 
 	// the old sample is too old to compare. Wait for another sample that is around window_duration old
 	if ((new_sample.time_us - old_sample.time_us) > static_cast<uint64_t>(kOldestPossibleSampleToCompareS * 1e+6f))
@@ -200,18 +242,18 @@ void GnssAnalyzer::analyzeVelAnomalies()
 	const matrix::Vector3f imu_delta_velocity = new_sample.imu_cumulative_delta_velocity_ned - old_sample.imu_cumulative_delta_velocity_ned;
 
 	const matrix::Vector3f residual = gnss_delta_velocity - imu_delta_velocity;
-	const float horizontal_residual = sqrtf(residual(0) * residual(0) + residual(1) * residual(1));
+	const float error = sqrtf(residual(0) * residual(0) + residual(1) * residual(1));
 
 	float suspicion_delta = 0;
 
-	if (horizontal_residual <= kVelSafeResidual)
+	if (error <= kVelSafeError)
 	{
 		suspicion_delta = -kSafeSuspicionDecreasePerWindow * window_fraction;
 	}
 	else
 	{
 		const float severity_weight = math::constrain(
-			(horizontal_residual - kVelSafeResidual) / (kVelSevereResidual - kVelSafeResidual),
+			(error - kVelSafeError) / (kVelSevereError - kVelSafeError),
 			0.f,
 			1.f);
 		suspicion_delta = kMaxSuspicionIncreasePerWindow * severity_weight * window_fraction;
@@ -219,15 +261,85 @@ void GnssAnalyzer::analyzeVelAnomalies()
 
 	_velocity_suspicion = math::constrain(_velocity_suspicion + suspicion_delta, 0.f, 1.f);
 
-	// Hysteresis
-	if (_velocity_suspicion >= kVelSpoofThreshold)
+	recalculateState();
+	_last_vel_analysis_time_us = new_sample.time_us;
+}
+
+void GnssAnalyzer::analyzePosAnomalies()
+{
+	if (_state == GnssSpoofingState::NoOrigin
+		|| _trusted_position_history.empty()
+		|| _gnss_endpoint_history.empty())
 	{
-		_state = GnssSpoofingState::Untrusted;
-	}
-	else if (_velocity_suspicion <= kVelUnspoofThreshold)
-	{
-		_state = GnssSpoofingState::Trusted;
+		return;
 	}
 
-	_last_vel_analysis_time_us = new_sample.time_us;
+	const TrustedPositionSample& trusted = _trusted_position_history.newest();
+
+	if (trusted.time_us <= _last_pos_analysis_time_us)
+	{
+		return;
+	}
+	if (trusted.time_us > _gnss_endpoint_history.newest().time_us)
+	{
+		return;
+	}
+	if (trusted.time_us < _gnss_endpoint_history.oldest().time_us)
+	{
+		_last_pos_analysis_time_us = trusted.time_us;
+		return;
+	}
+
+	const auto gnss_bracket_indices = _gnss_endpoint_history.findBracket(trusted.time_us);
+
+	if (!gnss_bracket_indices)
+	{
+		return;
+	}
+
+	const GnssEndpoint& before = _gnss_endpoint_history.atOldestOffset(gnss_bracket_indices->before);
+	const GnssEndpoint& after =_gnss_endpoint_history.atOldestOffset(gnss_bracket_indices->after);
+
+	if ((after.time_us - before.time_us) > kPosMaxGnssInterpolationGapUs)
+	{
+		_last_pos_analysis_time_us = trusted.time_us;
+		return;
+	}
+
+	matrix::Vector3f gnss_position_ned = lerp(
+		before.gnss_position_ned,
+		after.gnss_position_ned,
+		before.time_us,
+		after.time_us,
+		trusted.time_us);
+	matrix::Vector2f gnss_position_ne = {gnss_position_ned(0), gnss_position_ned(1)};
+	const matrix::Vector2f position_residual = gnss_position_ne - trusted.position_ne;
+
+	const matrix::Vector3f gnss_position_ned_variance = lerp(
+		before.gnss_position_ned_variance,
+		after.gnss_position_ned_variance,
+		before.time_us,
+		after.time_us,
+		trusted.time_us);
+	const float variance_n = gnss_position_ned_variance(0) + trusted.position_variance_ne(0);
+	const float variance_e = gnss_position_ned_variance(1) + trusted.position_variance_ne(1);
+
+	const float normalized_error = sqrtf(position_residual(0) * position_residual(0) / variance_n + position_residual(1) * position_residual(1) / variance_e);
+
+	float suspicion_delta;
+
+	if (normalized_error <= kPosSafeNormalizedError)
+	{
+		suspicion_delta = -kSafePositionSuspicionDecrease;
+	}
+	else
+	{
+		const float severity = math::constrain((normalized_error - kPosSafeNormalizedError) / (kPosSevereNormalizedError - kPosSafeNormalizedError), 0.f, 1.f);
+		suspicion_delta = kMaxPositionSuspicionIncrease * severity;
+	}
+
+	_position_suspicion = math::constrain(_position_suspicion + suspicion_delta, 0.f, 1.f);
+
+	recalculateState();
+	_last_pos_analysis_time_us = trusted.time_us;
 }

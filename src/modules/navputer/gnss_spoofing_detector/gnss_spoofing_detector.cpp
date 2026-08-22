@@ -91,7 +91,8 @@ void GnssSpoofingDetector::maybeFuseGnss()
 	sensor_gps_s gps{};
 	const bool gps_updated = _gps_sub.update(&gps);
 
-	if (_origin_valid && gps_updated && gps.vel_ned_valid
+	if (_origin_valid
+	    && gps_updated && gps.vel_ned_valid
 	    && PX4_ISFINITE(gps.latitude_deg)
 	    && PX4_ISFINITE(gps.longitude_deg)
 	    && PX4_ISFINITE(gps.altitude_msl_m))
@@ -112,11 +113,60 @@ void GnssSpoofingDetector::maybeFuseGnss()
 	}
 }
 
+void GnssSpoofingDetector::maybeGrabTrustedPosition()
+{
+	if (!_origin_valid)
+	{
+		return;
+	}
+
+	for (size_t instance = 0; instance < _aux_global_pos_subs.size(); ++instance)
+	{
+		aux_global_position_s aux_global_pos;
+
+		if (_aux_global_pos_subs[instance].update(&aux_global_pos))
+		{
+			continue;
+		}
+		if (aux_global_pos.source != aux_global_position_s::SOURCE_PSEUDOLITES)
+		{
+			continue;
+		}
+		if (!PX4_ISFINITE(aux_global_pos.lat)
+			|| !PX4_ISFINITE(aux_global_pos.lon)
+			|| !PX4_ISFINITE(aux_global_pos.eph)
+			|| aux_global_pos.eph < 0.f)
+		{
+			continue;
+		}
+
+		const uint64_t time_us = aux_global_pos.timestamp_sample > 0 ? aux_global_pos.timestamp_sample : aux_global_pos.timestamp;
+
+		if (time_us == 0)
+		{
+			continue;;
+		}
+
+		const matrix::Vector2f position_ne = _origin_projection.project(aux_global_pos.lat, aux_global_pos.lon);
+		const float position_variance = aux_global_pos.eph * aux_global_pos.eph;
+
+		_analyzer.pushTrustedPosition(GnssAnalyzer::TrustedPositionSample{
+			.time_us = time_us,
+			.position_ne = position_ne,
+			.position_variance_ne = {
+				position_variance,
+				position_variance
+			}
+		});
+	}
+}
+
 void GnssSpoofingDetector::update(const DeltaVelocityEarth &imu_ned)
 {
 	maybeUpdateOrigin();
 
 	_analyzer.pushIMU(imu_ned);
+	maybeGrabTrustedPosition();
 	maybeFuseGnss();
 }
 

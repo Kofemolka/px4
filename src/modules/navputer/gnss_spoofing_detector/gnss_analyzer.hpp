@@ -63,47 +63,61 @@ namespace GnssAnalyzerConstants
 {
 constexpr size_t kHighFreqIMUQueueSize = 512;
 constexpr size_t kLowFreqGPSQueueSize = 128;
+constexpr size_t kLowFreqTrustedPosQueueSize = 64;
 } // GnssAnalyzerConstants
 
 class GnssAnalyzer
 {
 public:
+	// input
+	struct TrustedPositionSample {
+		uint64_t time_us;
+		matrix::Vector2f position_ne;
+		matrix::Vector2f position_variance_ne;
+	};
+public:
 	GnssSpoofingState state() const;
 	void reset(bool origin_valid);
 	void pushIMU(const DeltaVelocityEarth &sample);
 	void pushGnss(const GnssKalmanFilter::Measurement &sample);
+	void pushTrustedPosition(const TrustedPositionSample &sample);
 private:
-	struct VelocityEndpoint
+	// internal
+	struct GnssEndpoint
 	{
 		uint64_t time_us{0};
+		matrix::Vector3f gnss_position_ned{};
+		matrix::Vector3f gnss_position_ned_variance{};
 		matrix::Vector3f gnss_velocity_ned{};
 		matrix::Vector3f imu_cumulative_delta_velocity_ned{};
 	};
-
 	struct IMUCumulativeVelocityEndpoint
 	{
 		uint64_t time_us{0};
 		matrix::Vector3f cumulative_velocity{};
 	};
 private:
-	matrix::Vector3f lerp(
-		const IMUCumulativeVelocityEndpoint& a,
-		const IMUCumulativeVelocityEndpoint& b,
-		uint64_t target_time_us);
 	void analyzeVelAnomalies();
+	void analyzePosAnomalies();
+	void recalculateState();
 private:
 	GnssSpoofingState _state{GnssSpoofingState::NoOrigin};
 	GnssKalmanFilter _gnss_kf;
 
 	HistoryRingBuffer<IMUCumulativeVelocityEndpoint,
 		GnssAnalyzerConstants::kHighFreqIMUQueueSize> _high_freq_imu_history;
-	HistoryRingBuffer<VelocityEndpoint,
-		GnssAnalyzerConstants::kLowFreqGPSQueueSize> _low_freq_gps_history;
+	HistoryRingBuffer<GnssEndpoint,
+		GnssAnalyzerConstants::kLowFreqGPSQueueSize> _gnss_endpoint_history;
+	HistoryRingBuffer<TrustedPositionSample,
+		GnssAnalyzerConstants::kLowFreqTrustedPosQueueSize> _trusted_position_history;
 
 	matrix::Vector3f _imu_cumulative_velocity_ned{};
 
 	uint64_t _last_vel_analysis_time_us{0};
+	uint64_t _last_pos_analysis_time_us{0};
+
 	float _velocity_suspicion{0};
+	float _position_suspicion{0};
 };
 
 #endif

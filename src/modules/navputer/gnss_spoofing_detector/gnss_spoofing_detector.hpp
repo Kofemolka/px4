@@ -42,10 +42,12 @@
 #define GNSS_SPOOFING_DETECTOR_HPP
 
 #include <uORB/Subscription.hpp>
+#include <uORB/SubscriptionMultiArray.hpp>
 #include <uORB/topics/sensor_gps.h>
 #include <uORB/topics/navput_local_position.h>
 #include <uORB/topics/navput_status_flags.h>
 #include <uORB/topics/ranging_beacon.h>
+#include <uORB/topics/aux_global_position.h>
 #include <drivers/drv_hrt.h>
 #include <lib/geo/geo.h>
 #include <ekf.h>
@@ -60,6 +62,7 @@ public:
 private:
 	void maybeUpdateOrigin();
 	void maybeFuseGnss();
+	void maybeGrabTrustedPosition();
 private:
 	GnssAnalyzer _analyzer;
 
@@ -73,6 +76,7 @@ private:
 	uORB::Subscription _gps_sub{ORB_ID(vehicle_gps_position)};
 	uORB::Subscription _local_position_sub{ORB_ID(navput_local_position)};
 	uORB::Subscription _status_sub{ORB_ID(navput_status_flags)};
+	uORB::SubscriptionMultiArray<aux_global_position_s, 4> _aux_global_pos_subs{ORB_ID::aux_global_position};
 };
 
 #endif
