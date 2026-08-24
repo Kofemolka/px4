@@ -122,9 +122,9 @@ void GnssSpoofingDetector::maybeGrabTrustedPosition()
 
 	for (size_t instance = 0; instance < _aux_global_pos_subs.size(); ++instance)
 	{
-		aux_global_position_s aux_global_pos;
+		aux_global_position_s aux_global_pos{};
 
-		if (_aux_global_pos_subs[instance].update(&aux_global_pos))
+		if (!_aux_global_pos_subs[instance].update(&aux_global_pos))
 		{
 			continue;
 		}
@@ -144,7 +144,7 @@ void GnssSpoofingDetector::maybeGrabTrustedPosition()
 
 		if (time_us == 0)
 		{
-			continue;;
+			continue;
 		}
 
 		const matrix::Vector2f position_ne = _origin_projection.project(aux_global_pos.lat, aux_global_pos.lon);
