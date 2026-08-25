@@ -56,7 +56,7 @@ constexpr float kMaxSuspicionIncreasePerWindow = 0.4f;
 constexpr float kSpoofThreshold = 0.8f;
 constexpr float kUnspoofThreshold = 0.2f;
 
-constexpr float kPosSafeNormalizedError = 2.5f;    // sigma
+constexpr float kPosSafeNormalizedError = 2.5f;  // sigma
 constexpr float kPosSevereNormalizedError = 5.f; // sigma
 
 constexpr float kSafePositionSuspicionDecrease = 0.1f;
@@ -198,39 +198,51 @@ void GnssAnalyzer::recalculateState()
 
 }
 
-void GnssAnalyzer::analyzeVelAnomalies()
+bool GnssAnalyzer::getVelEndpoints(GnssEndpoint& recent, GnssEndpoint& old)
 {
 	if (_state == GnssSpoofingState::NoOrigin || _gnss_endpoint_history.empty())
 	{
-		return;
+		return false;
 	}
 
-	const auto& new_sample = _gnss_endpoint_history.newest();
+	recent = _gnss_endpoint_history.newest();
 
 	// first time call after reset()
 	if (_last_vel_analysis_time_us == 0)
 	{
-		_last_vel_analysis_time_us = new_sample.time_us;
-		return;
+		_last_vel_analysis_time_us = recent.time_us;
+		return false;
 	}
 
-	if (new_sample.time_us <= static_cast<uint64_t>(kVelWindowDurationS * 1e+6f))
+	if (recent.time_us <= static_cast<uint64_t>(kVelWindowDurationS * 1e+6f))
 	{
-		return;
+		return false;
 	}
 
-	const auto& old_idx_opt = _gnss_endpoint_history.findLastAtOrBefore(new_sample.time_us - static_cast<uint64_t>(kVelWindowDurationS * 1e+6f));
+	const auto& old_idx_opt = _gnss_endpoint_history.findLastAtOrBefore(recent.time_us - static_cast<uint64_t>(kVelWindowDurationS * 1e+6f));
 
 	// not enough samples yet
 	if (!old_idx_opt)
 	{
-		return;
+		return false;
 	}
 
-	const auto& old_sample = _gnss_endpoint_history.atOldestOffset(*old_idx_opt);
+	old = _gnss_endpoint_history.atOldestOffset(*old_idx_opt);
 
 	// the old sample is too old to compare. Wait for another sample that is around window_duration old
-	if ((new_sample.time_us - old_sample.time_us) > static_cast<uint64_t>(kOldestPossibleSampleToCompareS * 1e+6f))
+	if ((recent.time_us - old.time_us) > static_cast<uint64_t>(kOldestPossibleSampleToCompareS * 1e+6f))
+	{
+		return false;
+	}
+
+	return true;
+}
+
+void GnssAnalyzer::analyzeVelAnomalies()
+{
+	GnssEndpoint new_sample, old_sample;
+
+	if (!getVelEndpoints(new_sample, old_sample))
 	{
 		return;
 	}
@@ -265,44 +277,59 @@ void GnssAnalyzer::analyzeVelAnomalies()
 	_last_vel_analysis_time_us = new_sample.time_us;
 }
 
-void GnssAnalyzer::analyzePosAnomalies()
+bool GnssAnalyzer::getPosEndpoints(TrustedPositionSample& trusted, GnssEndpoint& before, GnssEndpoint& after)
 {
 	if (_state == GnssSpoofingState::NoOrigin
 		|| _trusted_position_history.empty()
 		|| _gnss_endpoint_history.empty())
 	{
-		return;
+		return false;
 	}
 
-	const TrustedPositionSample& trusted = _trusted_position_history.newest();
+	trusted = _trusted_position_history.newest();
 
 	if (trusted.time_us <= _last_pos_analysis_time_us)
 	{
-		return;
+		return false;
 	}
+	// wait for more gnss samples
 	if (trusted.time_us > _gnss_endpoint_history.newest().time_us)
 	{
-		return;
+		return false;
 	}
+	// trusted sample is too old to be covered by gnss samples
 	if (trusted.time_us < _gnss_endpoint_history.oldest().time_us)
 	{
 		_last_pos_analysis_time_us = trusted.time_us;
-		return;
+		return false;
 	}
 
 	const auto gnss_bracket_indices = _gnss_endpoint_history.findBracket(trusted.time_us);
 
 	if (!gnss_bracket_indices)
 	{
-		return;
+		return false;
 	}
 
-	const GnssEndpoint& before = _gnss_endpoint_history.atOldestOffset(gnss_bracket_indices->before);
-	const GnssEndpoint& after =_gnss_endpoint_history.atOldestOffset(gnss_bracket_indices->after);
+	before = _gnss_endpoint_history.atOldestOffset(gnss_bracket_indices->before);
+	after =_gnss_endpoint_history.atOldestOffset(gnss_bracket_indices->after);
 
 	if ((after.time_us - before.time_us) > kPosMaxGnssInterpolationGapUs)
 	{
 		_last_pos_analysis_time_us = trusted.time_us;
+		return false;
+	}
+
+	return true;
+}
+
+void GnssAnalyzer::analyzePosAnomalies()
+{
+	TrustedPositionSample trusted;
+	GnssEndpoint before, after;
+
+	if (!getPosEndpoints(trusted, before, after))
+	{
 		return;
 	}
 
@@ -324,7 +351,8 @@ void GnssAnalyzer::analyzePosAnomalies()
 	const float variance_n = gnss_position_ned_variance(0) + trusted.position_variance_ne(0);
 	const float variance_e = gnss_position_ned_variance(1) + trusted.position_variance_ne(1);
 
-	const float normalized_error = sqrtf(position_residual(0) * position_residual(0) / variance_n + position_residual(1) * position_residual(1) / variance_e);
+	const float normalized_error = sqrtf(position_residual(0) * position_residual(0) / variance_n
+						+ position_residual(1) * position_residual(1) / variance_e);
 
 	float suspicion_delta;
 
@@ -334,7 +362,10 @@ void GnssAnalyzer::analyzePosAnomalies()
 	}
 	else
 	{
-		const float severity = math::constrain((normalized_error - kPosSafeNormalizedError) / (kPosSevereNormalizedError - kPosSafeNormalizedError), 0.f, 1.f);
+		const float severity = math::constrain((normalized_error - kPosSafeNormalizedError)
+							/ (kPosSevereNormalizedError - kPosSafeNormalizedError),
+							0.f,
+							1.f);
 		suspicion_delta = kMaxPositionSuspicionIncrease * severity;
 	}
 

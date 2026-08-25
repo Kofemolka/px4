@@ -97,8 +97,12 @@ private:
 		matrix::Vector3f cumulative_velocity{};
 	};
 private:
+	bool getVelEndpoints(GnssEndpoint& recent, GnssEndpoint& old);
 	void analyzeVelAnomalies();
+
+	bool getPosEndpoints(TrustedPositionSample& trusted, GnssEndpoint& before, GnssEndpoint& after);
 	void analyzePosAnomalies();
+
 	void recalculateState();
 private:
 	GnssSpoofingState _state{GnssSpoofingState::NoOrigin};

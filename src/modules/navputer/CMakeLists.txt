@@ -34,7 +34,7 @@
 set(EKF_BASE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../ekf2)
 
 if(PX4_PLATFORM MATCHES "posix")
-	add_subdirectory(gps_spoof_test)
+	add_subdirectory(test_gnss_spoofing_generator)
 endif()
 
 set(EKF_DERIVATION_SRC_DIR ${EKF_BASE_DIR}/EKF/python/ekf_derivation)

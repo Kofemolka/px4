@@ -8,13 +8,13 @@
 #include <uORB/Subscription.hpp>
 #include <uORB/topics/sensor_gps.h>
 
-class GpsSpoofTest final : public ModuleBase, public px4::ScheduledWorkItem
+class GnssSpoofTest final : public ModuleBase, public px4::ScheduledWorkItem
 {
 public:
 	static Descriptor desc;
 
-	GpsSpoofTest();
-	~GpsSpoofTest() override = default;
+	GnssSpoofTest();
+	~GnssSpoofTest() override = default;
 
 	static int task_spawn(int argc, char *argv[]);
 	static int custom_command(int argc, char *argv[]);

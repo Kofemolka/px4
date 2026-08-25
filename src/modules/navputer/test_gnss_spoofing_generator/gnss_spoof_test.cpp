@@ -1,4 +1,4 @@
-#include "gps_spoof_test.hpp"
+#include "gnss_spoof_test.hpp"
 
 #include <drivers/drv_hrt.h>
 
@@ -6,21 +6,23 @@
 
 using namespace time_literals;
 
-ModuleBase::Descriptor GpsSpoofTest::desc{task_spawn, custom_command, print_usage};
+ModuleBase::Descriptor GnssSpoofTest::desc{task_spawn, custom_command, print_usage};
 
-GpsSpoofTest::GpsSpoofTest() :
+GnssSpoofTest::GnssSpoofTest() :
 	ScheduledWorkItem(MODULE_NAME, px4::wq_configurations::hp_default)
 {
 }
 
-bool GpsSpoofTest::init()
+bool GnssSpoofTest::init()
 {
-	if (!_gps1_pub.advertise()) {
+	if (!_gps1_pub.advertise())
+	{
 		PX4_ERR("failed to advertise GPS test output");
 		return false;
 	}
 
-	if (_gps1_pub.get_instance() != 1) {
+	if (_gps1_pub.get_instance() != 1)
+	{
 		PX4_ERR("expected GPS instance 1, got %d", _gps1_pub.get_instance());
 		return false;
 	}
@@ -29,24 +31,25 @@ bool GpsSpoofTest::init()
 	return true;
 }
 
-void GpsSpoofTest::spoofVelocity(sensor_gps_s &gps)
+void GnssSpoofTest::spoofVelocity(sensor_gps_s &gps)
 {
 	// TODO: implement velocity spoofing.
 }
 
-void GpsSpoofTest::spoofPosition(sensor_gps_s &gps)
+void GnssSpoofTest::spoofPosition(sensor_gps_s &gps)
 {
 	// TODO: implement position spoofing.
 }
 
-void GpsSpoofTest::setMode(Mode mode)
+void GnssSpoofTest::setMode(Mode mode)
 {
 	_mode = mode;
 }
 
-void GpsSpoofTest::Run()
+void GnssSpoofTest::Run()
 {
-	if (should_exit()) {
+	if (should_exit())
+	{
 		ScheduleClear();
 		exit_and_cleanup(desc);
 		return;
@@ -54,36 +57,40 @@ void GpsSpoofTest::Run()
 
 	sensor_gps_s gps{};
 
-	if (!_gps0_sub.update(&gps)) {
+	if (!_gps0_sub.update(&gps))
+	{
 		return;
 	}
 
-	switch (_mode) {
-	case Mode::Velocity:
-		spoofVelocity(gps);
-		break;
+	switch (_mode)
+	{
+		case Mode::Velocity:
+			spoofVelocity(gps);
+			break;
 
-	case Mode::Position:
-		spoofPosition(gps);
-		break;
+		case Mode::Position:
+			spoofPosition(gps);
+			break;
 
-	case Mode::None:
-		break;
+		case Mode::None:
+			break;
 	}
 
 	gps.timestamp = hrt_absolute_time();
 	_gps1_pub.publish(gps);
 }
 
-int GpsSpoofTest::task_spawn(int argc, char *argv[])
+int GnssSpoofTest::task_spawn(int argc, char *argv[])
 {
-	GpsSpoofTest *instance = new GpsSpoofTest();
+	GnssSpoofTest *instance = new GnssSpoofTest();
 
-	if (instance) {
+	if (instance)
+	{
 		desc.object.store(instance);
 		desc.task_id = task_id_is_work_queue;
 
-		if (instance->init()) {
+		if (instance->init())
+		{
 			return PX4_OK;
 		}
 	}
@@ -95,25 +102,29 @@ int GpsSpoofTest::task_spawn(int argc, char *argv[])
 	return PX4_ERROR;
 }
 
-int GpsSpoofTest::custom_command(int argc, char *argv[])
+int GnssSpoofTest::custom_command(int argc, char *argv[])
 {
-	GpsSpoofTest *instance = get_instance<GpsSpoofTest>(desc);
+	GnssSpoofTest *instance = get_instance<GnssSpoofTest>(desc);
 
-	if (!instance) {
+	if (!instance)
+	{
 		return print_usage("not running");
 	}
 
-	if (argc == 1 && !strcmp(argv[0], "velocity")) {
+	if (argc == 1 && !strcmp(argv[0], "velocity"))
+	{
 		instance->setMode(Mode::Velocity);
 		return PX4_OK;
 	}
 
-	if (argc == 1 && !strcmp(argv[0], "position")) {
+	if (argc == 1 && !strcmp(argv[0], "position"))
+	{
 		instance->setMode(Mode::Position);
 		return PX4_OK;
 	}
 
-	if (argc == 1 && !strcmp(argv[0], "stop")) {
+	if (argc == 1 && !strcmp(argv[0], "stop"))
+	{
 		instance->setMode(Mode::None);
 		return PX4_OK;
 	}
@@ -121,9 +132,10 @@ int GpsSpoofTest::custom_command(int argc, char *argv[])
 	return print_usage("unknown command");
 }
 
-int GpsSpoofTest::print_usage(const char *reason)
+int GnssSpoofTest::print_usage(const char *reason)
 {
-	if (reason) {
+	if (reason)
+	{
 		PX4_WARN("%s", reason);
 	}
 
@@ -140,7 +152,7 @@ Minimal SITL GPS test publisher. It republishes GPS instance 0 as instance 1.
 	return 0;
 }
 
-extern "C" __EXPORT int gps_spoof_test_main(int argc, char *argv[])
+extern "C" __EXPORT int gnss_spoof_gen_main(int argc, char *argv[])
 {
-	return ModuleBase::main(GpsSpoofTest::desc, argc, argv);
+	return ModuleBase::main(GnssSpoofTest::desc, argc, argv);
 }
