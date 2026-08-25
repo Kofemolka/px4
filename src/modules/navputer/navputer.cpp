@@ -69,8 +69,7 @@ Navputer::Navputer(const px4::wq_config_t &config, bool replay_mode):
 	_param_ekf2_req_hdrift(_params->ekf2_req_hdrift),
 	_param_ekf2_req_vdrift(_params->ekf2_req_vdrift),
 	_param_ekf2_req_fix(_params->ekf2_req_fix),
-	_param_ekf2_gsf_tas(_params->ekf2_gsf_tas),
-	_vehicle_gps_position_sub{ORB_ID(vehicle_gps_position), static_cast<uint8_t>(_param_npt_gps_instance.get())}
+	_param_ekf2_gsf_tas(_params->ekf2_gsf_tas)
 {
 	AdvertiseTopics();
 }
@@ -684,11 +683,20 @@ void Navputer::UpdateRangingBeaconSample(ekf2_timestamps_s &ekf2_timestamps)
 
 void Navputer::UpdateGpsSample(ekf2_timestamps_s &ekf2_timestamps)
 {
-	// EKF GPS message. Copied from EKF2::UpdateGpsSample()
-	sensor_gps_s vehicle_gps_position;
+	const auto needed_gps_instance = _param_npt_gps_instance.get();
 
-	if (_vehicle_gps_position_sub.update(&vehicle_gps_position))
+	for (int instance = 0; instance < _vehicle_gps_position_subs.size(); ++instance)
 	{
+		sensor_gps_s vehicle_gps_position;
+
+		if (!_vehicle_gps_position_subs[instance].update(&vehicle_gps_position))
+		{
+			continue;
+		}
+		if (instance != needed_gps_instance)
+		{
+			continue;
+		}
 
 		Vector3f vel_ned;
 
@@ -697,11 +705,10 @@ void Navputer::UpdateGpsSample(ekf2_timestamps_s &ekf2_timestamps)
 			vel_ned = Vector3f(vehicle_gps_position.vel_n_m_s,
 					   vehicle_gps_position.vel_e_m_s,
 					   vehicle_gps_position.vel_d_m_s);
-
 		}
 		else
 		{
-			return; //TODO: change and set to NAN
+			continue; //TODO: change and set to NAN
 		}
 
 		if (fabsf(_param_ekf2_gps_yaw_off.get()) > 0.f)

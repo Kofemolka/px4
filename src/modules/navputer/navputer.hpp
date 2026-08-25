@@ -216,6 +216,9 @@ private:
 	// Beacons
 	uORB::Subscription _ranging_beacon_sub {ORB_ID(ranging_beacon)};
 
+	// GPS
+	uORB::SubscriptionMultiArray<sensor_gps_s, 4> _vehicle_gps_position_subs{ORB_ID::vehicle_gps_position};
+
 	uORB::Publication<navput_attitude_s>           		_attitude_pub{ORB_ID(navput_attitude)};
 	uORB::Publication<navput_local_position_s>     		_local_position_pub{ORB_ID(navput_local_position)};
 
@@ -276,8 +279,5 @@ private:
 		(ParamExtFloat<px4::params::EKF2_GSF_TAS>)     _param_ekf2_gsf_tas,
 		(ParamFloat<px4::params::EKF2_GPS_YAW_OFF>)    _param_ekf2_gps_yaw_off
 	)
-
-	// GPS
-	uORB::Subscription _vehicle_gps_position_sub;
 };
 #endif // !NAVPUTER_HPP
