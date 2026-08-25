@@ -684,7 +684,7 @@ void Navputer::UpdateRangingBeaconSample(ekf2_timestamps_s &ekf2_timestamps)
 
 void Navputer::UpdateGpsSample(ekf2_timestamps_s &ekf2_timestamps)
 {
-	// EKF GPS message. Copief from EKF2::UpdateGpsSample()
+	// EKF GPS message. Copied from EKF2::UpdateGpsSample()
 	sensor_gps_s vehicle_gps_position;
 
 	if (_vehicle_gps_position_sub.update(&vehicle_gps_position))
