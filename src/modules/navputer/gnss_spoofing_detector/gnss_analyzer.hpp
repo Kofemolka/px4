@@ -46,12 +46,7 @@
 #include "history_ring_buffer.hpp"
 #include "gnss_kf.hpp"
 
-/*
- * Uninitialized <-> Spoofed
- * Uninitialized <-> Healthy
- * Healthy <-> Spoofed
- */
-
+// NoOrigin <-> Spoofed <-> Healthy
 enum class GnssSpoofingState
 {
 	NoOrigin,

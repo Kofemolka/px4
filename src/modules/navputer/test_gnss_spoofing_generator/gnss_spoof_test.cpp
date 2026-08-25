@@ -3,6 +3,14 @@
 #include <drivers/drv_hrt.h>
 
 #include <cstring>
+#include <math.h>
+
+namespace
+{
+constexpr float kVelFixedRotationRad = M_PI_4; // PI/4 rad = 45 deg
+constexpr float kVelFixedMagnitudeOffsetMS = 5.f; // m/s
+constexpr float kPosFixedOffset = 200.f; // m
+} // namespace
 
 using namespace time_literals;
 
@@ -31,19 +39,79 @@ bool GnssSpoofTest::init()
 	return true;
 }
 
-void GnssSpoofTest::spoofVelocity(sensor_gps_s &gps)
+void GnssSpoofTest::spoofVelocityByFixedRotation(sensor_gps_s &gps)
 {
-	// TODO: implement velocity spoofing.
+	const float hor_speed = sqrtf(gps.vel_n_m_s * gps.vel_n_m_s + gps.vel_e_m_s * gps.vel_e_m_s);
+	const float angle = atan2f(gps.vel_e_m_s, gps.vel_n_m_s); // from North to East angle
+	const float spoofed_angle = angle + kVelFixedRotationRad;
+
+	gps.vel_n_m_s = hor_speed * cosf(spoofed_angle);
+	gps.vel_e_m_s = hor_speed * sinf(spoofed_angle);
+
+	gps.vel_m_s = hor_speed;
+	gps.cog_rad = atan2f(gps.vel_e_m_s, gps.vel_n_m_s);
 }
 
-void GnssSpoofTest::spoofPosition(sensor_gps_s &gps)
+void GnssSpoofTest::spoofVelocityByFixedMagnitudeOffset(sensor_gps_s &gps)
 {
-	// TODO: implement position spoofing.
+	const float hor_speed = sqrtf(gps.vel_n_m_s * gps.vel_n_m_s + gps.vel_e_m_s * gps.vel_e_m_s);
+	const float angle = atan2f(gps.vel_e_m_s, gps.vel_n_m_s); // from North to East angle
+	const float spoofed_hor_speed = hor_speed + kVelFixedMagnitudeOffsetMS;
+
+	gps.vel_n_m_s = spoofed_hor_speed * cosf(angle);
+	gps.vel_e_m_s = spoofed_hor_speed * sinf(angle);
+
+	gps.vel_m_s = spoofed_hor_speed;
+	gps.cog_rad = atan2f(gps.vel_e_m_s, gps.vel_n_m_s);
+}
+
+void GnssSpoofTest::spoofPositionFixedOffset(sensor_gps_s &gps)
+{
+	if (!_origin_initialized)
+	{
+		return;
+	}
+
+	matrix::Vector2f position_ne = _origin_projection.project(
+		gps.latitude_deg,
+		gps.longitude_deg);
+
+	const matrix::Vector2f spoof_offset_ne{
+		kPosFixedOffset, // North
+		kPosFixedOffset  // East
+	};
+
+	position_ne += spoof_offset_ne;
+
+	double spoofed_lat;
+	double spoofed_lon;
+
+	_origin_projection.reproject(
+		position_ne(0),
+		position_ne(1),
+		spoofed_lat,
+		spoofed_lon);
+
+	gps.latitude_deg = spoofed_lat;
+	gps.longitude_deg = spoofed_lon;
 }
 
 void GnssSpoofTest::setMode(Mode mode)
 {
 	_mode = mode;
+	_elapsed_from_last_spoof_us = 0;
+}
+
+void GnssSpoofTest::maybeInitOrigin(sensor_gps_s& gps)
+{
+	if (!_origin_initialized)
+	{
+		_origin_projection.initReference(
+			gps.latitude_deg,
+			gps.longitude_deg,
+			gps.timestamp_sample);
+		_origin_initialized = true;
+	}
 }
 
 void GnssSpoofTest::Run()
@@ -62,16 +130,25 @@ void GnssSpoofTest::Run()
 		return;
 	}
 
+	maybeInitOrigin(gps);
+
 	switch (_mode)
 	{
-		case Mode::Velocity:
-			spoofVelocity(gps);
+		case Mode::VelocityFixedRotation:
+			spoofVelocityByFixedRotation(gps);
 			break;
 
-		case Mode::Position:
-			spoofPosition(gps);
+		case Mode::VelocityFixedMagnitudeOffset:
+			spoofVelocityByFixedMagnitudeOffset(gps);
 			break;
 
+		case Mode::PositionFixedOffset:
+			spoofPositionFixedOffset(gps);
+			break;
+
+		//case Mode::VelocityRampRotation:
+		//case Mode::VelocityRampMagnitudeOffset:
+		//case Mode::PositionRampOffset:
 		case Mode::None:
 			break;
 	}
@@ -111,15 +188,21 @@ int GnssSpoofTest::custom_command(int argc, char *argv[])
 		return print_usage("not running");
 	}
 
-	if (argc == 1 && !strcmp(argv[0], "velocity"))
+	if (argc == 1 && !strcmp(argv[0], "vel_frot"))
 	{
-		instance->setMode(Mode::Velocity);
+		instance->setMode(Mode::VelocityFixedRotation);
 		return PX4_OK;
 	}
 
-	if (argc == 1 && !strcmp(argv[0], "position"))
+	if (argc == 1 && !strcmp(argv[0], "vel_fmag"))
 	{
-		instance->setMode(Mode::Position);
+		instance->setMode(Mode::VelocityFixedMagnitudeOffset);
+		return PX4_OK;
+	}
+
+	if (argc == 1 && !strcmp(argv[0], "pos_f"))
+	{
+		instance->setMode(Mode::PositionFixedOffset);
 		return PX4_OK;
 	}
 
@@ -143,7 +226,7 @@ int GnssSpoofTest::print_usage(const char *reason)
 		R"DESCR_STR(
 Minimal SITL GPS test publisher. It republishes GPS instance 0 as instance 1.
 )DESCR_STR");
-	PRINT_MODULE_USAGE_NAME("gps_spoof_test", "system");
+	PRINT_MODULE_USAGE_NAME("gnss_spoof_gen", "system");
 	PRINT_MODULE_USAGE_COMMAND("start");
 	PRINT_MODULE_USAGE_COMMAND_DESCR("velocity", "Select the velocity spoofing stub");
 	PRINT_MODULE_USAGE_COMMAND_DESCR("position", "Select the position spoofing stub");
