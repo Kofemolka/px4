@@ -47,6 +47,11 @@ namespace
 constexpr double kOriginEpsilon = 1e-8;
 } // namespace
 
+GnssSpoofingDetector::GnssSpoofingDetector(const int gps_instance)
+	: _gps_sub{ORB_ID(vehicle_gps_position), static_cast<uint8_t>(gps_instance)}
+{
+}
+
 void GnssSpoofingDetector::maybeUpdateOrigin()
 {
 	navput_local_position_s local_position{};

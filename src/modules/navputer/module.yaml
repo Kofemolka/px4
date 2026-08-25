@@ -92,6 +92,14 @@ parameters:
       default: 7
       min: 0
       max: 15
+    NPT_GPS_INSTANCE:
+      description:
+        short: GPS instance number
+        long: Picks a GPS instance to subscribe on
+      type: int32
+      default: 0
+      min: 0
+      max: 3
 
     NPT_FC_AGP_LATCH:
       description:

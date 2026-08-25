@@ -54,6 +54,7 @@ Navputer::Navputer(const px4::wq_config_t &config, bool replay_mode):
 	_param_npt_rngbc_gate(_params->ekf2_rngbc_gate),
 	// GNSS
 	_param_npt_gps_ctrl(_params->ekf2_gps_ctrl),
+	_param_npt_gps_instance{},
 	_param_ekf2_gps_mode(_params->ekf2_gps_mode),
 	_param_ekf2_gps_v_noise(_params->ekf2_gps_v_noise),
 	_param_ekf2_gps_p_noise(_params->ekf2_gps_p_noise),
@@ -68,7 +69,9 @@ Navputer::Navputer(const px4::wq_config_t &config, bool replay_mode):
 	_param_ekf2_req_hdrift(_params->ekf2_req_hdrift),
 	_param_ekf2_req_vdrift(_params->ekf2_req_vdrift),
 	_param_ekf2_req_fix(_params->ekf2_req_fix),
-	_param_ekf2_gsf_tas(_params->ekf2_gsf_tas)
+	_param_ekf2_gsf_tas(_params->ekf2_gsf_tas),
+	_vehicle_gps_position_sub{ORB_ID(vehicle_gps_position), static_cast<uint8_t>(_param_npt_gps_instance.get())},
+	_gnss_spoofing_detector(_param_npt_gps_instance.get())
 {
 	AdvertiseTopics();
 }

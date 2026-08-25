@@ -218,9 +218,6 @@ private:
 	// Beacons
 	uORB::Subscription _ranging_beacon_sub {ORB_ID(ranging_beacon)};
 
-	// GPS
-	uORB::Subscription _vehicle_gps_position_sub{ORB_ID(vehicle_gps_position)};
-
 	uORB::Publication<navput_attitude_s>           		_attitude_pub{ORB_ID(navput_attitude)};
 	uORB::Publication<navput_local_position_s>     		_local_position_pub{ORB_ID(navput_local_position)};
 
@@ -249,7 +246,6 @@ private:
 	MotionDetector _motion_detector;
 	CopilotLifecycle _copilot_lifecycle;
 	ElevationInitializer _elevation_initializer;
-	GnssSpoofingDetector _gnss_spoofing_detector;
 
 	parameters *_params;
 
@@ -263,6 +259,7 @@ private:
 		// GNSS
 		// TODO: currently reusing EKF2 params. We should redeclare them in "NPT namespace".
 		(ParamExtInt<px4::params::NPT_GPS_CTRL>)       _param_npt_gps_ctrl,
+		(ParamInt<px4::params::NPT_GPS_INSTANCE>)      _param_npt_gps_instance,
 		(ParamExtInt<px4::params::EKF2_GPS_MODE>)      _param_ekf2_gps_mode,
 		(ParamExtFloat<px4::params::EKF2_GPS_V_NOISE>) _param_ekf2_gps_v_noise,
 		(ParamExtFloat<px4::params::EKF2_GPS_P_NOISE>) _param_ekf2_gps_p_noise,
@@ -281,5 +278,9 @@ private:
 		(ParamExtFloat<px4::params::EKF2_GSF_TAS>)     _param_ekf2_gsf_tas,
 		(ParamFloat<px4::params::EKF2_GPS_YAW_OFF>)    _param_ekf2_gps_yaw_off
 	)
+
+	// GPS
+	uORB::Subscription _vehicle_gps_position_sub;
+	GnssSpoofingDetector _gnss_spoofing_detector;
 };
 #endif // !NAVPUTER_HPP
