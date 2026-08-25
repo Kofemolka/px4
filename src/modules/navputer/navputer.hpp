@@ -89,7 +89,6 @@
 #include <uORB/topics/vehicle_air_data.h>
 #include <uORB/topics/vehicle_magnetometer.h>
 #include <uORB/topics/ranging_beacon.h>
-#include <uORB/topics/estimator_gps_status.h>
 #include <uORB/topics/sensor_gps.h>
 
 #include <uORB/topics/navput_attitude.h>
