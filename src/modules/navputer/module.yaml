@@ -76,7 +76,7 @@ parameters:
         short: GPS fusion switch
         long: Enable/disable GPS fusion in the navputer estimator
       type: boolean
-      default: 1
+      default: 0
     NPT_GPS_CTRL:
       description:
         short: GNSS sensor aiding

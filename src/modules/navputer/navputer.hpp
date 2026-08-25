@@ -100,6 +100,7 @@
 #include "motion_detector.hpp"
 #include "copilot_lifecycle.hpp"
 #include "elevation_initializer.hpp"
+#include "gnss_spoofing_detector/gnss_spoofing_detector.hpp"
 
 #include "mlat_aux.hpp"
 #include "fusion_controller.hpp"
@@ -279,5 +280,7 @@ private:
 		(ParamExtFloat<px4::params::EKF2_GSF_TAS>)     _param_ekf2_gsf_tas,
 		(ParamFloat<px4::params::EKF2_GPS_YAW_OFF>)    _param_ekf2_gps_yaw_off
 	)
+
+	GnssSpoofingDetector _gnss_spoofing_detector;
 };
 #endif // !NAVPUTER_HPP

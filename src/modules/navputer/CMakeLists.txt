@@ -33,6 +33,10 @@
 
 set(EKF_BASE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../ekf2)
 
+if(PX4_PLATFORM MATCHES "posix")
+	add_subdirectory(gps_spoof_test)
+endif()
+
 set(EKF_DERIVATION_SRC_DIR ${EKF_BASE_DIR}/EKF/python/ekf_derivation)
 
 set(EKF_GENERATED_FILES ${EKF_DERIVATION_SRC_DIR}/generated/state.h)
@@ -53,6 +57,13 @@ set(NAVPUTER_SRCS
 	fusion_controller.cpp
 	elevation_initializer.hpp
 	elevation_initializer.cpp
+	gnss_spoofing_detector/gnss_spoofing_detector.hpp
+	gnss_spoofing_detector/gnss_spoofing_detector.cpp
+	gnss_spoofing_detector/gnss_analyzer.hpp
+	gnss_spoofing_detector/gnss_analyzer.cpp
+	gnss_spoofing_detector/gnss_kf.hpp
+	gnss_spoofing_detector/gnss_kf.cpp
+	gnss_spoofing_detector/history_ring_buffer.hpp
 )
 
 px4_add_module(

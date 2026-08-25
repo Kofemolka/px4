@@ -215,6 +215,12 @@ void OutputPredictor::calculateOutputStates(const uint64_t time_us, const Vector
 	// correct for measured acceleration due to gravity
 	delta_vel_earth(2) += _gravity * delta_velocity_dt;
 
+	_latest_delta_velocity = {
+		.time_us = time_us,
+		.delta_velocity_ned = delta_vel_earth,
+		.dt = delta_velocity_dt
+	};
+
 	// calculate the earth frame velocity derivatives
 	_delta_vel_sum += delta_vel_earth;
 	_delta_vel_dt += delta_velocity_dt;
@@ -262,6 +268,11 @@ void OutputPredictor::calculateOutputStates(const uint64_t time_us, const Vector
 	_delta_angle_sum *= delta_quat_unaided;
 	_delta_angle_sum.normalize();
 	_delta_angle_sum_dt += delta_angle_dt;
+}
+
+DeltaVelocityEarth OutputPredictor::immediateLatestDeltaVelocity() const
+{
+	return _latest_delta_velocity;
 }
 
 void OutputPredictor::correctOutputStates(const uint64_t time_delayed_us,

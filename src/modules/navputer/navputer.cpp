@@ -69,7 +69,8 @@ Navputer::Navputer(const px4::wq_config_t &config, bool replay_mode):
 	_param_ekf2_req_hdrift(_params->ekf2_req_hdrift),
 	_param_ekf2_req_vdrift(_params->ekf2_req_vdrift),
 	_param_ekf2_req_fix(_params->ekf2_req_fix),
-	_param_ekf2_gsf_tas(_params->ekf2_gsf_tas)
+	_param_ekf2_gsf_tas(_params->ekf2_gsf_tas),
+	_gnss_spoofing_detector(_param_npt_gps_instance.get())
 {
 	AdvertiseTopics();
 }
@@ -224,6 +225,7 @@ void Navputer::Run()
 
 		// push imu data into estimator
 		_ekf.setIMUData(imu_sample_new);
+		_gnss_spoofing_detector.update(_ekf.immediateLatestDeltaVelocity());
 
 		UpdateMotionDetector(imu_sample_new);
 
@@ -752,8 +754,10 @@ void Navputer::UpdateGpsSample(ekf2_timestamps_s &ekf2_timestamps)
 					     vehicle_gps_position.antenna_offset_z),
 		};
 
-		// TODO: to check if it is being spoofed before fuse
-		_ekf.setGpsData(gnss_sample);
+		if (_gnss_spoofing_detector.state() == GnssSpoofingState::Trusted)
+		{
+			_ekf.setGpsData(gnss_sample);
+		}
 
 		// TODO: to look closer and decide whether we should reuse it
 		//const float geoid_height = altitude_ellipsoid - altitude_amsl;
