@@ -92,6 +92,9 @@ private:
 		matrix::Vector3f cumulative_velocity{};
 	};
 private:
+	void transitionTo(GnssSpoofingState new_state);
+	void maybeLogSuspicion();
+
 	bool getVelEndpoints(GnssEndpoint& recent, GnssEndpoint& old);
 	void analyzeVelAnomalies();
 
@@ -117,6 +120,8 @@ private:
 
 	float _velocity_suspicion{0};
 	float _position_suspicion{0};
+
+	uint64_t _last_diagnostic_log_us{0};
 };
 
 #endif

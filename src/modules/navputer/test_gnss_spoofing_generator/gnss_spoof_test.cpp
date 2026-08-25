@@ -206,7 +206,7 @@ int GnssSpoofTest::custom_command(int argc, char *argv[])
 		return PX4_OK;
 	}
 
-	if (argc == 1 && !strcmp(argv[0], "stop"))
+	if (argc == 1 && !strcmp(argv[0], "clear"))
 	{
 		instance->setMode(Mode::None);
 		return PX4_OK;
@@ -228,9 +228,10 @@ Minimal SITL GPS test publisher. It republishes GPS instance 0 as instance 1.
 )DESCR_STR");
 	PRINT_MODULE_USAGE_NAME("gnss_spoof_gen", "system");
 	PRINT_MODULE_USAGE_COMMAND("start");
-	PRINT_MODULE_USAGE_COMMAND_DESCR("velocity", "Select the velocity spoofing stub");
-	PRINT_MODULE_USAGE_COMMAND_DESCR("position", "Select the position spoofing stub");
-	PRINT_MODULE_USAGE_COMMAND_DESCR("stop", "Disable spoofing and publish a clean GPS copy");
+	PRINT_MODULE_USAGE_COMMAND_DESCR("vel_frot", "Spoofing by velocity constant rotation");
+	PRINT_MODULE_USAGE_COMMAND_DESCR("vel_fmag", "Spoofing by velocity constant magnitude offset");
+	PRINT_MODULE_USAGE_COMMAND_DESCR("pos_f", "Spoofing by position constant offset");
+	PRINT_MODULE_USAGE_COMMAND_DESCR("clear", "Disable spoofing and publish a clean GPS copy");
 	PRINT_MODULE_USAGE_DEFAULT_COMMANDS();
 	return 0;
 }

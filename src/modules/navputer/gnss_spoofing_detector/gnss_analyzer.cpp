@@ -42,6 +42,7 @@
 
 #include <px4_platform_common/log.h>
 #include <matrix/Vector.hpp>
+#include <drivers/drv_hrt.h>
 
 namespace
 {
@@ -63,11 +64,45 @@ constexpr float kSafePositionSuspicionDecrease = 0.1f;
 constexpr float kMaxPositionSuspicionIncrease = 0.4f;
 
 constexpr uint64_t kPosMaxGnssInterpolationGapUs = 250'000;
+
+constexpr uint64_t kDiagnosticLogPeriodUs = 5000'000; // 5 sec
 } // namespace
 
 GnssSpoofingState GnssAnalyzer::state() const
 {
 	return _state;
+}
+
+void GnssAnalyzer::transitionTo(GnssSpoofingState new_state)
+{
+	if (new_state != _state)
+	{
+		PX4_INFO("GNSSAnalyzer: %d -> %d (vel_sus=%.2f pos_sus=%.2f)",
+			static_cast<int>(_state),
+			static_cast<int>(new_state),
+			static_cast<double>(_velocity_suspicion),
+			static_cast<double>(_position_suspicion));
+		_state = new_state;
+	}
+}
+
+
+void GnssAnalyzer::maybeLogSuspicion()
+{
+	const hrt_abstime now = hrt_absolute_time();
+
+	if (hrt_elapsed_time(&_last_diagnostic_log_us)
+		< kDiagnosticLogPeriodUs)
+	{
+		return;
+	}
+
+	_last_diagnostic_log_us = now;
+
+	PX4_DEBUG("GNSS detector: state=%u vel_sus=%.2f pos_sus=%.2f",
+	static_cast<unsigned>(_state),
+	static_cast<double>(_velocity_suspicion),
+	static_cast<double>(_position_suspicion));
 }
 
 void GnssAnalyzer::reset(bool origin_valid)
@@ -84,11 +119,11 @@ void GnssAnalyzer::reset(bool origin_valid)
 	{
 		_velocity_suspicion = kSpoofThreshold;
 		_position_suspicion = kSpoofThreshold;
-		_state = GnssSpoofingState::Untrusted;
+		transitionTo(GnssSpoofingState::Untrusted);
 	}
 	else
 	{
-		_state = GnssSpoofingState::NoOrigin;
+		transitionTo(GnssSpoofingState::NoOrigin);
 	}
 }
 
@@ -189,11 +224,11 @@ void GnssAnalyzer::recalculateState()
 
 	if (total_suspicion >= kSpoofThreshold)
 	{
-		_state = GnssSpoofingState::Untrusted;
+		transitionTo(GnssSpoofingState::Untrusted);
 	}
 	else if (total_suspicion <= kUnspoofThreshold)
 	{
-		_state = GnssSpoofingState::Trusted;
+		transitionTo(GnssSpoofingState::Trusted);
 	}
 
 }
@@ -274,6 +309,7 @@ void GnssAnalyzer::analyzeVelAnomalies()
 	_velocity_suspicion = math::constrain(_velocity_suspicion + suspicion_delta, 0.f, 1.f);
 
 	recalculateState();
+	maybeLogSuspicion();
 	_last_vel_analysis_time_us = new_sample.time_us;
 }
 
@@ -372,5 +408,6 @@ void GnssAnalyzer::analyzePosAnomalies()
 	_position_suspicion = math::constrain(_position_suspicion + suspicion_delta, 0.f, 1.f);
 
 	recalculateState();
+	maybeLogSuspicion();
 	_last_pos_analysis_time_us = trusted.time_us;
 }
