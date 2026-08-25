@@ -51,7 +51,25 @@ Navputer::Navputer(const px4::wq_config_t &config, bool replay_mode):
 	_param_npt_rngbc_ctrl(_params->ekf2_rngbc_ctrl),
 	_param_npt_rngbc_delay(_params->ekf2_rngbc_delay),
 	_param_npt_rngbc_noise(_params->ekf2_rngbc_noise),
-	_param_npt_rngbc_gate(_params->ekf2_rngbc_gate)
+	_param_npt_rngbc_gate(_params->ekf2_rngbc_gate),
+	// GNSS
+	_param_npt_gps_ctrl(_params->ekf2_gps_ctrl),
+	_param_npt_gps_instance{},
+	_param_ekf2_gps_mode(_params->ekf2_gps_mode),
+	_param_ekf2_gps_v_noise(_params->ekf2_gps_v_noise),
+	_param_ekf2_gps_p_noise(_params->ekf2_gps_p_noise),
+	_param_ekf2_gps_p_gate(_params->ekf2_gps_p_gate),
+	_param_ekf2_gps_v_gate(_params->ekf2_gps_v_gate),
+	_param_ekf2_gps_check(_params->ekf2_gps_check),
+	_param_ekf2_req_eph(_params->ekf2_req_eph),
+	_param_ekf2_req_epv(_params->ekf2_req_epv),
+	_param_ekf2_req_sacc(_params->ekf2_req_sacc),
+	_param_ekf2_req_nsats(_params->ekf2_req_nsats),
+	_param_ekf2_req_pdop(_params->ekf2_req_pdop),
+	_param_ekf2_req_hdrift(_params->ekf2_req_hdrift),
+	_param_ekf2_req_vdrift(_params->ekf2_req_vdrift),
+	_param_ekf2_req_fix(_params->ekf2_req_fix),
+	_param_ekf2_gsf_tas(_params->ekf2_gsf_tas)
 {
 	AdvertiseTopics();
 }
@@ -231,6 +249,7 @@ void Navputer::Run()
 			.visual_odometry_timestamp_rel = ekf2_timestamps_s::RELATIVE_TIMESTAMP_INVALID,
 		};
 
+		UpdateGpsSample(ekf2_timestamps);
 		UpdateBaroSample(ekf2_timestamps);
 		UpdateMagSample(ekf2_timestamps);
 		UpdateRangingBeaconSample(ekf2_timestamps);
@@ -659,6 +678,97 @@ void Navputer::UpdateRangingBeaconSample(ekf2_timestamps_s &ekf2_timestamps)
 		};
 
 		_ekf.setRangingBeaconData(sample);
+	}
+}
+
+void Navputer::UpdateGpsSample(ekf2_timestamps_s &ekf2_timestamps)
+{
+	const auto needed_gps_instance = _param_npt_gps_instance.get();
+
+	for (int instance = 0; instance < _vehicle_gps_position_subs.size(); ++instance)
+	{
+		sensor_gps_s vehicle_gps_position;
+
+		if (!_vehicle_gps_position_subs[instance].update(&vehicle_gps_position))
+		{
+			continue;
+		}
+		if (instance != needed_gps_instance)
+		{
+			continue;
+		}
+
+		Vector3f vel_ned;
+
+		if (vehicle_gps_position.vel_ned_valid)
+		{
+			vel_ned = Vector3f(vehicle_gps_position.vel_n_m_s,
+					   vehicle_gps_position.vel_e_m_s,
+					   vehicle_gps_position.vel_d_m_s);
+		}
+		else
+		{
+			continue; //TODO: change and set to NAN
+		}
+
+		if (fabsf(_param_ekf2_gps_yaw_off.get()) > 0.f)
+		{
+			if (!PX4_ISFINITE(vehicle_gps_position.heading_offset) && PX4_ISFINITE(vehicle_gps_position.heading))
+			{
+				// Apply offset
+				float yaw_offset = matrix::wrap_pi(math::radians(_param_ekf2_gps_yaw_off.get()));
+				vehicle_gps_position.heading_offset = yaw_offset;
+				vehicle_gps_position.heading = matrix::wrap_pi(vehicle_gps_position.heading - yaw_offset);
+			}
+		}
+
+		const float altitude_amsl = static_cast<float>(vehicle_gps_position.altitude_msl_m);
+		//const float altitude_ellipsoid = static_cast<float>(vehicle_gps_position.altitude_ellipsoid_m);
+
+		// timestamp_sample is corrected by the sensors module (per-receiver delay or PPS)
+		const bool timestamp_corrected = vehicle_gps_position.timestamp_sample > 0
+						 && vehicle_gps_position.timestamp_sample != vehicle_gps_position.timestamp;
+
+		gnssSample gnss_sample{
+			.time_us = timestamp_corrected ? vehicle_gps_position.timestamp_sample : vehicle_gps_position.timestamp,
+			.lat = vehicle_gps_position.latitude_deg,
+			.lon = vehicle_gps_position.longitude_deg,
+			.alt = altitude_amsl,
+			.vel = vel_ned,
+			.hacc = vehicle_gps_position.eph,
+			.vacc = vehicle_gps_position.epv,
+			.sacc = vehicle_gps_position.s_variance_m_s,
+			.fix_type = vehicle_gps_position.fix_type,
+			.nsats = vehicle_gps_position.satellites_used,
+			.pdop = sqrtf(vehicle_gps_position.hdop *vehicle_gps_position.hdop
+				      + vehicle_gps_position.vdop * vehicle_gps_position.vdop),
+			.yaw = vehicle_gps_position.heading, //TODO: move to different message
+			.yaw_acc = vehicle_gps_position.heading_accuracy,
+			.yaw_offset = vehicle_gps_position.heading_offset,
+			.spoofed = vehicle_gps_position.spoofing_state == sensor_gps_s::SPOOFING_STATE_DETECTED,
+			.jammed = vehicle_gps_position.jamming_state == sensor_gps_s::JAMMING_STATE_DETECTED,
+			.pos_body = Vector3f(vehicle_gps_position.antenna_offset_x,
+					     vehicle_gps_position.antenna_offset_y,
+					     vehicle_gps_position.antenna_offset_z),
+		};
+
+		// TODO: to check if it is being spoofed before fuse
+		_ekf.setGpsData(gnss_sample);
+
+		// TODO: to look closer and decide whether we should reuse it
+		//const float geoid_height = altitude_ellipsoid - altitude_amsl;
+
+		//if (_last_geoid_height_update_us == 0) {
+		//	_geoid_height_lpf.reset(geoid_height);
+		//	_last_geoid_height_update_us = gnss_sample.time_us;
+
+		//} else if (gnss_sample.time_us > _last_geoid_height_update_us) {
+		//	const float dt = 1e-6f * (gnss_sample.time_us - _last_geoid_height_update_us);
+		//	_geoid_height_lpf.setParameters(dt, kGeoidHeightLpfTimeConstant);
+		//	_geoid_height_lpf.update(geoid_height);
+		//	_last_geoid_height_update_us = gnss_sample.time_us;
+		//}
+
 	}
 }
 
