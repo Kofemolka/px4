@@ -41,13 +41,6 @@
 #include <lib/geo/geo.h>
 #include <lib/lat_lon_alt/lat_lon_alt.hpp>
 
-struct DeltaVelocityEarth
-{
-	uint64_t time_us{0};
-	matrix::Vector3f delta_velocity_ned{};
-	float dt{0.f};
-};
-
 class OutputPredictor
 {
 public:
@@ -135,8 +128,6 @@ public:
 	void set_vel_correction_tc(const float tau) { _vel_tau = tau; }
 	void set_gravity(const float gravity) { _gravity = gravity; }
 
-	DeltaVelocityEarth immediateLatestDeltaVelocity() const;
-
 private:
 
 	/*
@@ -214,7 +205,6 @@ private:
 
 	float _gravity{CONSTANTS_ONE_G};
 
-	DeltaVelocityEarth _latest_delta_velocity;
 };
 
 #endif // !EKF_OUTPUT_PREDICTOR_H

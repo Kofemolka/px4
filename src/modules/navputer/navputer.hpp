@@ -101,7 +101,6 @@
 #include "motion_detector.hpp"
 #include "copilot_lifecycle.hpp"
 #include "elevation_initializer.hpp"
-#include "gnss_spoofing_detector/gnss_spoofing_detector.hpp"
 
 #include "mlat_aux.hpp"
 #include "fusion_controller.hpp"
@@ -281,6 +280,5 @@ private:
 
 	// GPS
 	uORB::Subscription _vehicle_gps_position_sub;
-	GnssSpoofingDetector _gnss_spoofing_detector;
 };
 #endif // !NAVPUTER_HPP
