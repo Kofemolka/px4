@@ -684,24 +684,30 @@ void Navputer::UpdateRangingBeaconSample(ekf2_timestamps_s &ekf2_timestamps)
 
 void Navputer::UpdateGpsSample(ekf2_timestamps_s &ekf2_timestamps)
 {
-	// EKF GPS message
+	// EKF GPS message. Copief from EKF2::UpdateGpsSample()
 	sensor_gps_s vehicle_gps_position;
 
-	if (_vehicle_gps_position_sub.update(&vehicle_gps_position)) {
+	if (_vehicle_gps_position_sub.update(&vehicle_gps_position))
+	{
 
 		Vector3f vel_ned;
 
-		if (vehicle_gps_position.vel_ned_valid) {
+		if (vehicle_gps_position.vel_ned_valid)
+		{
 			vel_ned = Vector3f(vehicle_gps_position.vel_n_m_s,
 					   vehicle_gps_position.vel_e_m_s,
 					   vehicle_gps_position.vel_d_m_s);
 
-		} else {
+		}
+		else
+		{
 			return; //TODO: change and set to NAN
 		}
 
-		if (fabsf(_param_ekf2_gps_yaw_off.get()) > 0.f) {
-			if (!PX4_ISFINITE(vehicle_gps_position.heading_offset) && PX4_ISFINITE(vehicle_gps_position.heading)) {
+		if (fabsf(_param_ekf2_gps_yaw_off.get()) > 0.f)
+		{
+			if (!PX4_ISFINITE(vehicle_gps_position.heading_offset) && PX4_ISFINITE(vehicle_gps_position.heading))
+			{
 				// Apply offset
 				float yaw_offset = matrix::wrap_pi(math::radians(_param_ekf2_gps_yaw_off.get()));
 				vehicle_gps_position.heading_offset = yaw_offset;
