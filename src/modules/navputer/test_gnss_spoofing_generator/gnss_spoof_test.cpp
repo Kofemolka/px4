@@ -23,18 +23,6 @@ GnssSpoofTest::GnssSpoofTest() :
 
 bool GnssSpoofTest::init()
 {
-	if (!_gps1_pub.advertise())
-	{
-		PX4_ERR("failed to advertise GPS test output");
-		return false;
-	}
-
-	if (_gps1_pub.get_instance() != 1)
-	{
-		PX4_ERR("expected GPS instance 1, got %d", _gps1_pub.get_instance());
-		return false;
-	}
-
 	ScheduleOnInterval(10_ms);
 	return true;
 }
@@ -121,6 +109,34 @@ void GnssSpoofTest::Run()
 		ScheduleClear();
 		exit_and_cleanup(desc);
 		return;
+	}
+
+	if (!_gps1_advertised)
+	{
+		if (orb_exists(ORB_ID(vehicle_gps_position), 0) != PX4_OK)
+		{
+			return; // GPS #0 simulator publisher is not ready yet.
+		}
+
+		if (!_gps1_pub.advertise())
+		{
+			PX4_ERR("failed to advertise GPS #1 test output");
+			ScheduleClear();
+			exit_and_cleanup(desc);
+			return;
+		}
+
+		if (_gps1_pub.get_instance() != 1)
+		{
+			PX4_ERR("expected GPS instance 1, got %d",
+			_gps1_pub.get_instance());
+			ScheduleClear();
+			exit_and_cleanup(desc);
+			return;
+		}
+
+		_gps1_advertised = true;
+		PX4_INFO("publishing clean GPS copy on instance 1");
 	}
 
 	sensor_gps_s gps{};

@@ -47,6 +47,7 @@ private:
 	bool _origin_initialized{false};
 	uORB::Subscription _gps0_sub{ORB_ID(vehicle_gps_position), 0};
 	uORB::PublicationMulti<sensor_gps_s> _gps1_pub{ORB_ID(vehicle_gps_position)};
+	bool _gps1_advertised{false};
 	uint64_t _elapsed_from_last_spoof_us{0};
 	Mode _mode{Mode::None};
 };
