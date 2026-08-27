@@ -113,36 +113,53 @@ using TrustedPositionHistory = HistoryRingBuffer<
 class BasicAnomalyAnalyzer
 {
 public:
-	void reset(float initial_suspicion)
-	{
-		_suspicion = initial_suspicion;
-	}
-
-	float suspicion() const
-	{
-		return _suspicion;
-	}
+	void reset(float initial_suspicion);
+	float suspicion() const;
 
 protected:
-	float _suspicion;
+	void updateWindowedSuspicion(float error, float safe_error,
+					     float severe_error, float window_fraction);
+
+	float _suspicion{0.f};
 };
 
 class GnssImuDeltaVelocityAnalyzer final : public BasicAnomalyAnalyzer
 {
 public:
-	void analyze(const GnssAnalyzerTypes::GnssEndpointHistory& history);
+	void reset(float initial_suspicion);
+	void analyze(const GnssAnalyzerTypes::GnssEndpointHistory &history);
+
+private:
+	uint64_t _last_analysis_time_us{0};
 };
 
 class RawGnssVelocityAnalyzer final : public BasicAnomalyAnalyzer
 {
 public:
-	void analyze(const GnssAnalyzerTypes::GnssEndpointHistory& history);
+	void reset(float initial_suspicion);
+	void analyze(const GnssAnalyzerTypes::GnssRawHistory &history);
+
+private:
+	uint64_t _last_analysis_time_us{0};
 };
 
 class GnssMlatPosAnalyzer final : public BasicAnomalyAnalyzer
 {
 public:
-	void analyze(const GnssAnalyzerTypes::TrustedPositionHistory& history);
+	void reset(float initial_suspicion);
+	void analyze(const GnssAnalyzerTypes::GnssEndpointHistory &gnss_history,
+		     const GnssAnalyzerTypes::TrustedPositionHistory &trusted_history);
+
+private:
+	void updateSuspicion(float normalized_error);
+
+	bool grabSamples(const GnssAnalyzerTypes::GnssEndpointHistory &gnss_history,
+			 const GnssAnalyzerTypes::TrustedPositionHistory &trusted_history,
+			 GnssAnalyzerTypes::TrustedPositionSample &trusted,
+			 GnssAnalyzerTypes::GnssEndpoint &before,
+			 GnssAnalyzerTypes::GnssEndpoint &after);
+
+	uint64_t _last_analysis_time_us{0};
 };
 
 class GnssAnalyzer
@@ -156,15 +173,8 @@ public:
 	void pushGnss(const GnssKalmanFilter::Measurement &sample);
 	void pushTrustedPosition(const GnssAnalyzerTypes::TrustedPositionSample &sample);
 private:
-private:
 	void transitionTo(GnssSpoofingState new_state);
 	void maybeLogSuspicion();
-
-	void analyzeVelAnomalies();
-	void compareVelDeltaImuWithGnssKF();
-	void compareVelAvgRawGnss();
-
-	void analyzePosAnomalies();
 
 	void recalculateState();
 private:
@@ -178,14 +188,11 @@ private:
 
 	matrix::Vector3f _imu_cumulative_velocity_ned{};
 
-	uint64_t _last_vel_analysis_time_us{0};
-	uint64_t _last_vel_raw_analysis_time_us{0};
-	uint64_t _last_pos_analysis_time_us{0};
-	uint64_t _last_diaglog_us{0};
+	GnssImuDeltaVelocityAnalyzer _imu_velocity_analyzer;
+	RawGnssVelocityAnalyzer _raw_velocity_analyzer;
+	GnssMlatPosAnalyzer _position_analyzer;
 
-	float _vel_delta_imu_with_gnsskf_suspicion{0};
-	float _vel_raw_suspicion{0};
-	float _position_suspicion{0};
+	uint64_t _last_diaglog_us{0};
 };
 
 #endif
