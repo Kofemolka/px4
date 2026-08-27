@@ -47,9 +47,15 @@ namespace
 constexpr double kOriginEpsilon = 1e-8;
 } // namespace
 
-GnssSpoofingDetector::GnssSpoofingDetector(const int gps_instance)
-	: _gps_sub{ORB_ID(vehicle_gps_position), static_cast<uint8_t>(gps_instance)}
+void GnssSpoofingDetector::setGnssInstance(const int instance)
 {
+	if (instance == _gps_sub.get_instance())
+	{
+		return;
+	}
+
+	_gps_sub = uORB::Subscription{ORB_ID(vehicle_gps_position), static_cast<uint8_t>(instance)};
+	_analyzer.reset(_origin_valid);
 }
 
 void GnssSpoofingDetector::maybeUpdateOrigin()

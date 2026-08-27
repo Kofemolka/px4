@@ -57,8 +57,8 @@
 class GnssSpoofingDetector
 {
 public:
-	GnssSpoofingDetector(const int gps_instance);
 	void update(const DeltaVelocityEarth &imu_ned);
+	void setGnssInstance(const int gnss_instance);
 	GnssSpoofingState state() const;
 private:
 	void maybeUpdateOrigin();
@@ -74,7 +74,7 @@ private:
 	bool _origin_valid{false};
 
 	// subscriptions
-	uORB::Subscription _gps_sub;
+	uORB::Subscription _gps_sub{ORB_ID(vehicle_gps_position)};
 	uORB::Subscription _local_position_sub{ORB_ID(navput_local_position)};
 	uORB::Subscription _status_sub{ORB_ID(navput_status_flags)};
 	uORB::SubscriptionMultiArray<aux_global_position_s, 4> _aux_global_pos_subs{ORB_ID::aux_global_position};

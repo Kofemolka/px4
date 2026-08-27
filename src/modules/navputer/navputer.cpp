@@ -69,9 +69,9 @@ Navputer::Navputer(const px4::wq_config_t &config, bool replay_mode):
 	_param_ekf2_req_hdrift(_params->ekf2_req_hdrift),
 	_param_ekf2_req_vdrift(_params->ekf2_req_vdrift),
 	_param_ekf2_req_fix(_params->ekf2_req_fix),
-	_param_ekf2_gsf_tas(_params->ekf2_gsf_tas),
-	_gnss_spoofing_detector(_param_npt_gps_instance.get())
+	_param_ekf2_gsf_tas(_params->ekf2_gsf_tas)
 {
+	_gnss_spoofing_detector.setGnssInstance(_param_npt_gps_instance.get());
 	AdvertiseTopics();
 }
 

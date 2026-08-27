@@ -251,6 +251,7 @@ private:
 	MotionDetector _motion_detector;
 	CopilotLifecycle _copilot_lifecycle;
 	ElevationInitializer _elevation_initializer;
+	GnssSpoofingDetector _gnss_spoofing_detector;
 
 	parameters *_params;
 
@@ -283,7 +284,5 @@ private:
 		(ParamExtFloat<px4::params::EKF2_GSF_TAS>)     _param_ekf2_gsf_tas,
 		(ParamFloat<px4::params::EKF2_GPS_YAW_OFF>)    _param_ekf2_gps_yaw_off
 	)
-
-	GnssSpoofingDetector _gnss_spoofing_detector;
 };
 #endif // !NAVPUTER_HPP
