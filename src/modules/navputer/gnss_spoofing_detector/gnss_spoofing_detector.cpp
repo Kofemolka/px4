@@ -155,7 +155,7 @@ void GnssSpoofingDetector::maybeGrabTrustedPosition()
 		const matrix::Vector2f position_ne = _origin_projection.project(aux_global_pos.lat, aux_global_pos.lon);
 		const float position_variance = aux_global_pos.eph * aux_global_pos.eph;
 
-		_analyzer.pushTrustedPosition(GnssAnalyzer::TrustedPositionSample{
+		_analyzer.pushTrustedPosition(GnssAnalyzerTypes::TrustedPositionSample{
 			.time_us = time_us,
 			.position_ne = position_ne,
 			.position_variance_ne = {

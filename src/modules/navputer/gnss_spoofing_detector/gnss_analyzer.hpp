@@ -54,51 +54,116 @@ enum class GnssSpoofingState
 	Untrusted
 };
 
-namespace GnssAnalyzerConstants
+namespace GnssAnalyzerTypes
 {
-constexpr size_t kHighFreqIMUQueueSize = 512;
-constexpr size_t kLowFreqGPSQueueSize = 128;
-constexpr size_t kLowFreqTrustedPosQueueSize = 64;
-} // GnssAnalyzerConstants
+constexpr uint64_t kGpsFreqHz = 8;
+constexpr uint64_t kImuFreqHz = 300;
+constexpr uint64_t kTwiceGpsPeriodUs = 2'000'000ULL / kGpsFreqHz;
+constexpr uint64_t kImuPeriodUs = 1'000'000ULL / kImuFreqHz;
+
+constexpr uint64_t kVelWindowDurationUs = 2'000'000; // 2 second window
+
+// Twice larger than the sufficient imu history capacity that should encompass two GPS periods ~250 ms
+constexpr size_t kHighFreqIMUQueueSize = (kTwiceGpsPeriodUs / kImuPeriodUs) * 2ULL;
+// Twice larger than the sufficient gnss history
+constexpr size_t kGnssQueueSize = (kVelWindowDurationUs / 1'000'000ULL) * kGpsFreqHz * 2ULL;
+constexpr size_t kTrustedPosQueueSize = 2;
+
+// internal
+struct GnssEndpoint
+{
+	uint64_t time_us{0};
+	matrix::Vector3f gnss_position_ned{};	matrix::Vector3f gnss_position_ned_variance{};
+	matrix::Vector3f gnss_velocity_ned{};
+	matrix::Vector3f imu_cumulative_delta_velocity_ned{};
+};
+struct GnssRaw
+{
+	uint64_t time_us{0};
+	matrix::Vector3f gnss_position_ned{};
+	matrix::Vector3f gnss_velocity_ned{};
+};
+struct IMUCumulativeVelocityEndpoint
+{
+	uint64_t time_us{0};
+	matrix::Vector3f cumulative_velocity{};
+};
+struct TrustedPositionSample
+{
+	uint64_t time_us;
+	matrix::Vector2f position_ne;
+	matrix::Vector2f position_variance_ne;
+};
+
+using CummulativeImuHistory = HistoryRingBuffer<
+	IMUCumulativeVelocityEndpoint,
+	GnssAnalyzerTypes::kHighFreqIMUQueueSize>;
+using GnssEndpointHistory = HistoryRingBuffer<
+	GnssEndpoint,
+	GnssAnalyzerTypes::kGnssQueueSize>;
+using GnssRawHistory = HistoryRingBuffer<
+	GnssRaw,
+	GnssAnalyzerTypes::kGnssQueueSize>;
+using TrustedPositionHistory = HistoryRingBuffer<
+	TrustedPositionSample,
+	GnssAnalyzerTypes::kTrustedPosQueueSize>;
+} // GnssAnalyzerTypes
+
+
+class BasicAnomalyAnalyzer
+{
+public:
+	void reset(float initial_suspicion)
+	{
+		_suspicion = initial_suspicion;
+	}
+
+	float suspicion() const
+	{
+		return _suspicion;
+	}
+
+protected:
+	float _suspicion;
+};
+
+class GnssImuDeltaVelocityAnalyzer final : public BasicAnomalyAnalyzer
+{
+public:
+	void analyze(const GnssAnalyzerTypes::GnssEndpointHistory& history);
+};
+
+class RawGnssVelocityAnalyzer final : public BasicAnomalyAnalyzer
+{
+public:
+	void analyze(const GnssAnalyzerTypes::GnssEndpointHistory& history);
+};
+
+class GnssMlatPosAnalyzer final : public BasicAnomalyAnalyzer
+{
+public:
+	void analyze(const GnssAnalyzerTypes::TrustedPositionHistory& history);
+};
 
 class GnssAnalyzer
 {
 public:
 	// input
-	struct TrustedPositionSample {
-		uint64_t time_us;
-		matrix::Vector2f position_ne;
-		matrix::Vector2f position_variance_ne;
-	};
 public:
 	GnssSpoofingState state() const;
 	void reset(bool origin_valid);
 	void pushIMU(const DeltaVelocityEarth &sample);
 	void pushGnss(const GnssKalmanFilter::Measurement &sample);
-	void pushTrustedPosition(const TrustedPositionSample &sample);
+	void pushTrustedPosition(const GnssAnalyzerTypes::TrustedPositionSample &sample);
 private:
-	// internal
-	struct GnssEndpoint
-	{
-		uint64_t time_us{0};
-		matrix::Vector3f gnss_position_ned{};
-		matrix::Vector3f gnss_position_ned_variance{};
-		matrix::Vector3f gnss_velocity_ned{};
-		matrix::Vector3f imu_cumulative_delta_velocity_ned{};
-	};
-	struct IMUCumulativeVelocityEndpoint
-	{
-		uint64_t time_us{0};
-		matrix::Vector3f cumulative_velocity{};
-	};
 private:
 	void transitionTo(GnssSpoofingState new_state);
 	void maybeLogSuspicion();
 
-	bool getVelEndpoints(GnssEndpoint& recent, GnssEndpoint& old);
 	void analyzeVelAnomalies();
+	void compareVelDeltaImuWithGnssKF();
+	void compareVelAvgRawGnss();
 
-	bool getPosEndpoints(TrustedPositionSample& trusted, GnssEndpoint& before, GnssEndpoint& after);
 	void analyzePosAnomalies();
 
 	void recalculateState();
@@ -106,22 +171,21 @@ private:
 	GnssSpoofingState _state{GnssSpoofingState::NoOrigin};
 	GnssKalmanFilter _gnss_kf;
 
-	HistoryRingBuffer<IMUCumulativeVelocityEndpoint,
-		GnssAnalyzerConstants::kHighFreqIMUQueueSize> _high_freq_imu_history;
-	HistoryRingBuffer<GnssEndpoint,
-		GnssAnalyzerConstants::kLowFreqGPSQueueSize> _gnss_endpoint_history;
-	HistoryRingBuffer<TrustedPositionSample,
-		GnssAnalyzerConstants::kLowFreqTrustedPosQueueSize> _trusted_position_history;
+	GnssAnalyzerTypes::CummulativeImuHistory _high_freq_imu_history;
+	GnssAnalyzerTypes::GnssEndpointHistory _gnss_endpoint_history;
+	GnssAnalyzerTypes::GnssRawHistory _gnss_raw_history;
+	GnssAnalyzerTypes::TrustedPositionHistory _trusted_position_history;
 
 	matrix::Vector3f _imu_cumulative_velocity_ned{};
 
 	uint64_t _last_vel_analysis_time_us{0};
+	uint64_t _last_vel_raw_analysis_time_us{0};
 	uint64_t _last_pos_analysis_time_us{0};
+	uint64_t _last_diaglog_us{0};
 
-	float _velocity_suspicion{0};
+	float _vel_delta_imu_with_gnsskf_suspicion{0};
+	float _vel_raw_suspicion{0};
 	float _position_suspicion{0};
-
-	uint64_t _last_diagnostic_log_us{0};
 };
 
 #endif
