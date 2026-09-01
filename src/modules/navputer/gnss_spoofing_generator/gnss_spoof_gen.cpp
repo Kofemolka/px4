@@ -10,11 +10,12 @@ namespace
 {
 constexpr float kVelFixedRotationRad = M_PI_4; // PI/4 rad = 45 deg
 constexpr float kVelFixedMagnitudeOffsetMS = 5.f; // m/s
+
 constexpr float kDefaultOffset = 200.f; // m
 constexpr float kDefaultOffsetMaxVelocity = 50.f; // m/s
-					    //
-constexpr double kDefaultCarryOffLatDeg = -12.0464;
-constexpr double kDefaultCarryOffLonDeg = -77.0428;
+
+constexpr double kDefaultCarryOffLatDeg = -12.0464; // gcs deg
+constexpr double kDefaultCarryOffLonDeg = -77.0428; // gcs deg
 constexpr float kDefaultCarryOffMaxVelocity = 5000.f; // m/s
 
 constexpr float kMaxSlope = 1.875f;
@@ -42,7 +43,7 @@ bool GnssSpoofGen::init()
 	return true;
 }
 
-// p = 10 * p^3 - 15 * p^4 + 6 * p^5
+// h(u) = 10 * u^3 - 15 * u^4 + 6 * u^5
 float rampQuintic(const float u)
 {
 	const float progress = math::constrain(u, 0.f, 1.f);
@@ -52,7 +53,7 @@ float rampQuintic(const float u)
 	return 10.f * progress3 - 15.f * progress4 + 6.f * progress5;
 }
 
-// dp = 30 * p^2 * (1 - p)^2
+// h`(u) = 30 * p^2 * (1 - u)^2
 float rampQuinticDerivative(const float u)
 {
 	const float progress = math::constrain(u, 0.f, 1.f);
@@ -62,7 +63,7 @@ float rampQuinticDerivative(const float u)
 	return 30.f * progress2 * tmp2;
 }
 
-// p = p - 6u^3 + 8u^4 - 3u^5
+// h(u) = u - 6u^3 + 8u^4 - 3u^5
 float rampQuinticCarryOffInitial(const float u)
 {
 	const float progress = math::constrain(u, 0.f, 1.f);
@@ -72,7 +73,7 @@ float rampQuinticCarryOffInitial(const float u)
 	return progress - 6.f * progress3 + 8.f * progress4 - 3.f * progress5;
 }
 
-// p = 1 - 18u^2 + 32u^3 - 15u^4
+// h`(u) = 1 - 18u^2 + 32u^3 - 15u^4
 float rampQuinticDerivativeCarryOffInitial(const float u)
 {
 	const float progress = math::constrain(u, 0.f, 1.f);
@@ -120,13 +121,13 @@ void GnssSpoofGen::spoofGradualOffset(sensor_gps_s &gps)
 	const auto elapsed_fraction = dt / transition_duration_s;
 	_pos_context.progress = math::min(_pos_context.progress + elapsed_fraction, 1.f);
 
-	const auto offset_fraction = rampQuintic(_pos_context.progress);
-	const auto offset_rate_fraction = rampQuinticDerivative(_pos_context.progress);
+	const auto position_fraction = rampQuintic(_pos_context.progress);
+	const auto position_rate_fraction = rampQuinticDerivative(_pos_context.progress);
 
 	// offset = full_offset * ramp(progress)
-	const matrix::Vector3f false_offset_position = _pos_context.target_ned * offset_fraction;
+	const matrix::Vector3f false_offset_position = _pos_context.target_ned * position_fraction;
 	// offset_vel = full_offset * ramp_dt(progress) / duration
-	const matrix::Vector3f false_offset_velocity = _pos_context.target_ned * offset_rate_fraction / transition_duration_s;
+	const matrix::Vector3f false_offset_velocity = _pos_context.target_ned * position_rate_fraction / transition_duration_s;
 
 	// spoofed pos
 	spoofed_position_ne += matrix::Vector2f{false_offset_position(0), false_offset_position(1)};
@@ -221,14 +222,14 @@ void GnssSpoofGen::spoofGradualCarryOff(sensor_gps_s &gps)
 
 	if (available_added_speed_m_s <= 0.f)
 	{
-		PX4_WARN("carryoff max speed must exceed start speed");
+		//PX4_WARN("carryoff max speed must exceed start speed");
 		return;
 	}
 
 	const float transition_duration_s = kMaxSlope * path_distance_m / available_added_speed_m_s;
-	const float progress_increment = dt / transition_duration_s;
 
-	_pos_context.progress = math::min(_pos_context.progress + progress_increment, 1.f);
+	const float elapsed_fraction = dt / transition_duration_s;
+	_pos_context.progress = math::min(_pos_context.progress + elapsed_fraction, 1.f);
 
 	const float position_fraction = rampQuintic(_pos_context.progress);
 	const float position_rate_fraction = rampQuinticDerivative(_pos_context.progress);
