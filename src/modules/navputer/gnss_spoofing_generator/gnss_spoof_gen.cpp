@@ -371,14 +371,14 @@ int GnssSpoofGen::task_spawn(int argc, char *argv[])
 	return PX4_ERROR;
 }
 
-void GnssSpoofGen::resetSpoofPositionTransitionNED(const matrix::Vector2f& tgt_ned, const float max_speed)
+void GnssSpoofGen::resetSpoofPositionContextNED(const matrix::Vector2f& tgt_ned, const float max_speed)
 {
 	_pos_context = {};
 	_pos_context.target_ned = matrix::Vector3f{tgt_ned(0), tgt_ned(1), 0.f};
 	_pos_context.max_speed = max_speed;
 }
 
-bool GnssSpoofGen::resetSpoofPositionTransitionGCS(const matrix::Vector2f& tgt_offset_ned, const float max_speed)
+bool GnssSpoofGen::resetSpoofPositionContextGCS(const matrix::Vector2f& tgt_offset_ned, const float max_speed)
 {
 	if (!_origin_initialized)
 	{
@@ -389,7 +389,7 @@ bool GnssSpoofGen::resetSpoofPositionTransitionGCS(const matrix::Vector2f& tgt_o
 		tgt_offset_ned(0),
 		tgt_offset_ned(1));
 
-	resetSpoofPositionTransitionNED(spoofed_position_ne, max_speed);
+	resetSpoofPositionContextNED(spoofed_position_ne, max_speed);
 	return true;
 }
 
@@ -397,7 +397,7 @@ int GnssSpoofGen::maybeParseOffsetCommand(int argc, char *argv[], GnssSpoofGen& 
 {
 	if (argc == 1)
 	{
-		instance.resetSpoofPositionTransitionNED({kDefaultOffset, kDefaultOffset}, kDefaultOffsetMaxVelocity);
+		instance.resetSpoofPositionContextNED({kDefaultOffset, kDefaultOffset}, kDefaultOffsetMaxVelocity);
 	}
 	if (argc == 3 || argc == 4)
 	{
@@ -426,7 +426,7 @@ int GnssSpoofGen::maybeParseOffsetCommand(int argc, char *argv[], GnssSpoofGen& 
 			return PX4_ERROR;
 		}
 
-		instance.resetSpoofPositionTransitionNED({x, y}, max_speed);
+		instance.resetSpoofPositionContextNED({x, y}, max_speed);
 	}
 
 	PX4_INFO("offset accepted: D=(%.1f, %.1f, %.1f) m, max_speed=%.1f m/s",
@@ -483,7 +483,7 @@ int GnssSpoofGen::maybeParseCarryOffCommand(int argc, char *argv[], GnssSpoofGen
 
 	if (gcs)
 	{
-		if (!instance.resetSpoofPositionTransitionGCS({x, y}, max_speed))
+		if (!instance.resetSpoofPositionContextGCS({x, y}, max_speed))
 		{
 			PX4_WARN("Failed to resetSpoofPositionTransitionGCS");
 			return PX4_ERROR;
@@ -491,7 +491,7 @@ int GnssSpoofGen::maybeParseCarryOffCommand(int argc, char *argv[], GnssSpoofGen
 	}
 	else
 	{
-		instance.resetSpoofPositionTransitionNED({x, y}, max_speed);
+		instance.resetSpoofPositionContextNED({x, y}, max_speed);
 	}
 
 	PX4_INFO("carry off accepted: TGT=(%.1f, %.1f, %.1f) m, max_speed=%.1f m/s",
@@ -501,6 +501,59 @@ int GnssSpoofGen::maybeParseCarryOffCommand(int argc, char *argv[], GnssSpoofGen
 		(double)instance._pos_context.max_speed);
 
 	instance.setMode(Mode::GradualCarryOff);
+
+	return PX4_OK;
+}
+
+int GnssSpoofGen::print_status()
+{
+	const char *mode_name = "clean";
+
+	switch (_mode)
+	{
+		case Mode::GradualOffset:
+			mode_name = "offset";
+			break;
+		case Mode::GradualCarryOff:
+			mode_name = "carryoff";
+			break;
+		case Mode::None:
+			break;
+	}
+
+	PX4_INFO("mode: %s", mode_name);
+	PX4_INFO("GPS: input instance #0 -> output instance #%d (%s)",
+		_gps1_pub.get_instance(),
+		_gps1_advertised ? "advertised" : "not advertised");
+	PX4_INFO("local origin: %s", _origin_initialized ? "initialized" : "not initialized");
+
+	if (_mode == Mode::None)
+	{
+		return PX4_OK;
+	}
+
+	PX4_INFO("progress: %.1f %%", (double)(_pos_context.progress * 100.f));
+	PX4_INFO("configured max speed: %.1f m/s", (double)_pos_context.max_speed);
+
+	if (_origin_initialized && _mode == Mode::GradualCarryOff)
+	{
+		double origin_lat{};
+		double origin_lon{};
+		double target_lat{};
+		double target_lon{};
+
+		_origin_projection.reproject(0.f, 0.f, origin_lat, origin_lon);
+		_origin_projection.reproject(_pos_context.target_ned(0),
+		_pos_context.target_ned(1),
+		target_lat, target_lon);
+
+		PX4_INFO("origin GCS: (%.7f, %.7f)", origin_lat, origin_lon);
+		PX4_INFO("target NED: (%.1f, %.1f, %.1f) m",
+			(double)_pos_context.target_ned(0),
+			(double)_pos_context.target_ned(1),
+			(double)_pos_context.target_ned(2));
+		PX4_INFO("target GCS: (%.7f, %.7f)", target_lat, target_lon);
+	}
 
 	return PX4_OK;
 }
@@ -543,10 +596,10 @@ int GnssSpoofGen::print_usage(const char *reason)
 		R"DESCR_STR(
 Minimal SITL GPS test publisher. It republishes GPS instance 0 as instance 1.
 )DESCR_STR");
-	PRINT_MODULE_USAGE_NAME("gnss_spoof_gen", "system");
+	PRINT_MODULE_USAGE_NAME("spoofer", "system");
 	PRINT_MODULE_USAGE_COMMAND("start");
-	PRINT_MODULE_USAGE_COMMAND_DESCR("offset",   "Spoofing which creates position offset from GPS#0. Usage: offset [<north> <east>] [<maxspeed>]");
-	PRINT_MODULE_USAGE_COMMAND_DESCR("carryoff", "Spoofing which changes the GPS position to a give one. Usage: carryoff [\"gcs\"|\"ned\" <x> <y>] [<maxspeed>]");
+	PRINT_MODULE_USAGE_COMMAND_DESCR("offset",   "Creates position offset from GPS#0. Usage: offset [<north> <east>] [<maxspeed>]");
+	PRINT_MODULE_USAGE_COMMAND_DESCR("carryoff", "Changes the GPS position to a given one. Usage: carryoff [\"gcs\"|\"ned\" <x> <y>] [<maxspeed>]");
 	PRINT_MODULE_USAGE_COMMAND_DESCR("clear",    "Disable spoofing and publish a clean GPS copy");
 	PRINT_MODULE_USAGE_DEFAULT_COMMANDS();
 	return 0;

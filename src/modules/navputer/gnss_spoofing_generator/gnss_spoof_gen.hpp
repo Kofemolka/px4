@@ -45,12 +45,16 @@ private:
 
 private:
 	void Run() override;
+	int print_status() override;
+
+	void setMode(Mode mode);
 	void maybeInitOrigin(sensor_gps_s& gps);
+
 	void spoofGradualOffset(sensor_gps_s &gps);
 	void spoofGradualCarryOff(sensor_gps_s &gps);
-	void setMode(Mode mode);
-	void resetSpoofPositionTransitionNED(const matrix::Vector2f& tgt_offset_ned, const float max_speed);
-	bool resetSpoofPositionTransitionGCS(const matrix::Vector2f& tgt_offset_ned, const float max_speed);
+
+	void resetSpoofPositionContextNED(const matrix::Vector2f& tgt_offset_ned, const float max_speed);
+	bool resetSpoofPositionContextGCS(const matrix::Vector2f& tgt_offset_ned, const float max_speed);
 
 private:
 	MapProjection _origin_projection{};
