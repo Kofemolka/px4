@@ -80,5 +80,5 @@ param set NPT_GPS_CTRL 7
 param set NPT_FUSE_GPS 1
 param set NPT_FUSE_AGP0 1
 
-gnss_spoof_gen start
+spoofer start
 navputer start

@@ -109,14 +109,14 @@ void GnssSpoofGen::spoofGradualOffset(sensor_gps_s &gps)
 		gps.latitude_deg,
 		gps.longitude_deg);
 
-	const float distance_m = _pos_context.target_ned.norm(); 
+	const float total_distance_m = _pos_context.target_ned.norm(); 
 
-	if (distance_m <= 0 || _pos_context.max_speed <= 0)
+	if (total_distance_m <= 0 || _pos_context.max_speed <= 0)
 	{
 		return;
 	}
 
-	const float transition_duration_s = kMaxSlope * distance_m / _pos_context.max_speed;
+	const float transition_duration_s = kMaxSlope * total_distance_m / _pos_context.max_speed;
 
 	const auto elapsed_fraction = dt / transition_duration_s;
 	_pos_context.progress = math::min(_pos_context.progress + elapsed_fraction, 1.f);
@@ -204,9 +204,9 @@ void GnssSpoofGen::spoofGradualCarryOff(sensor_gps_s &gps)
 	_pos_context.last_sample_time_us = gps.timestamp_sample;
 
 	const matrix::Vector3f path_displacement = _pos_context.target_ned - _pos_context.start_ned;
-	const float path_distance_m = path_displacement.norm();
+	const float total_distance_m = path_displacement.norm();
 
-	if (path_distance_m <= FLT_EPSILON || _pos_context.max_speed <= 0)
+	if (total_distance_m <= FLT_EPSILON || _pos_context.max_speed <= 0)
 	{
 		return;
 	}
@@ -226,7 +226,7 @@ void GnssSpoofGen::spoofGradualCarryOff(sensor_gps_s &gps)
 		return;
 	}
 
-	const float transition_duration_s = kMaxSlope * path_distance_m / available_added_speed_m_s;
+	const float transition_duration_s = kMaxSlope * total_distance_m / available_added_speed_m_s;
 
 	const float elapsed_fraction = dt / transition_duration_s;
 	_pos_context.progress = math::min(_pos_context.progress + elapsed_fraction, 1.f);
@@ -239,15 +239,12 @@ void GnssSpoofGen::spoofGradualCarryOff(sensor_gps_s &gps)
 
 	const matrix::Vector3f false_position_ned =
 		_pos_context.start_ned
-		+ path_displacement * position_fraction
-		+ start_velocity_ned
-		* (transition_duration_s * initial_velocity_fraction);
+		+ path_displacement * position_fraction // new trajectory contribution
+		+ start_velocity_ned * (transition_duration_s * initial_velocity_fraction); // old trajectory contribution
 
 	const matrix::Vector3f false_velocity_ned =
-		path_displacement
-		* (position_rate_fraction / transition_duration_s)
-		+ start_velocity_ned
-		* initial_velocity_rate_fraction;
+		path_displacement * (position_rate_fraction / transition_duration_s) // new trajectory contribution
+		+ start_velocity_ned * initial_velocity_rate_fraction; // old trajectory contribution
 	
 	double spoofed_lat{};
 	double spoofed_lon{};
@@ -555,7 +552,7 @@ Minimal SITL GPS test publisher. It republishes GPS instance 0 as instance 1.
 	return 0;
 }
 
-extern "C" __EXPORT int gnss_spoof_gen_main(int argc, char *argv[])
+extern "C" __EXPORT int spoofer_main(int argc, char *argv[])
 {
 	return ModuleBase::main(GnssSpoofGen::desc, argc, argv);
 }
