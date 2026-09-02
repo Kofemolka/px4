@@ -45,6 +45,7 @@
 namespace
 {
 constexpr double kOriginEpsilon = 1e-8;
+constexpr float kMaxStddevMultiplier = 10.f;
 } // namespace
 
 void GnssSpoofingDetector::setGnssInstance(const int instance)
@@ -181,8 +182,17 @@ void GnssSpoofingDetector::update(const DeltaVelocityEarth &imu_ned)
 	maybeFuseGnss();
 }
 
-GnssSpoofingState GnssSpoofingDetector::state() const
+GnssSpoofingDetector::SpoofReport GnssSpoofingDetector::report() const
 {
-	return _analyzer.state();
+	const float suspicion = _analyzer.suspicion();
+	const float normalized = math::constrain(suspicion / GnssAnalyzerTypes::kSpoofThreshold, 0.f, 1.f);
+	// normalized^2 gives gentler earlier response comparing to linear
+	const float stddev_multiplier = 1.f + (kMaxStddevMultiplier - 1.f) * normalized * normalized;
+
+	return SpoofReport {
+		.state = _analyzer.state(),
+		.pos_stddev_mult = stddev_multiplier,
+		.vel_stddev_mult = stddev_multiplier
+	};
 }
 

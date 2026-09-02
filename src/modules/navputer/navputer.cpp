@@ -251,12 +251,14 @@ void Navputer::Run()
 			.visual_odometry_timestamp_rel = ekf2_timestamps_s::RELATIVE_TIMESTAMP_INVALID,
 		};
 
-		UpdateGpsSample(ekf2_timestamps);
+		const auto gnss_spoof_report = _gnss_spoofing_detector.report();
+		_fusion_controller.setGpsTrusted(gnss_spoof_report.state == GnssSpoofingState::Trusted);
+
+		UpdateGpsSample(ekf2_timestamps, gnss_spoof_report);
 		UpdateBaroSample(ekf2_timestamps);
 		UpdateMagSample(ekf2_timestamps);
 		UpdateRangingBeaconSample(ekf2_timestamps);
 
-		_fusion_controller.setGpsTrusted(_gnss_spoofing_detector.state() == GnssSpoofingState::Trusted);
 		_fusion_controller.update(_ekf);
 
 		if (_ekf.update()) {
@@ -712,7 +714,7 @@ void Navputer::UpdateRangingBeaconSample(ekf2_timestamps_s &ekf2_timestamps)
 	}
 }
 
-void Navputer::UpdateGpsSample(ekf2_timestamps_s &ekf2_timestamps)
+void Navputer::UpdateGpsSample(ekf2_timestamps_s &ekf2_timestamps, const GnssSpoofingDetector::SpoofReport& report)
 {
 	const auto needed_gps_instance = _param_npt_gps_instance.get();
 
@@ -768,9 +770,9 @@ void Navputer::UpdateGpsSample(ekf2_timestamps_s &ekf2_timestamps)
 			.lon = vehicle_gps_position.longitude_deg,
 			.alt = altitude_amsl,
 			.vel = vel_ned,
-			.hacc = vehicle_gps_position.eph,
+			.hacc = vehicle_gps_position.eph * report.pos_stddev_mult,
 			.vacc = vehicle_gps_position.epv,
-			.sacc = vehicle_gps_position.s_variance_m_s,
+			.sacc = vehicle_gps_position.s_variance_m_s * report.vel_stddev_mult,
 			.fix_type = vehicle_gps_position.fix_type,
 			.nsats = vehicle_gps_position.satellites_used,
 			.pdop = sqrtf(vehicle_gps_position.hdop *vehicle_gps_position.hdop
@@ -787,7 +789,7 @@ void Navputer::UpdateGpsSample(ekf2_timestamps_s &ekf2_timestamps)
 
 		_ekf.setGpsData(gnss_sample);
 
-		// TODO: to look closer and decide whether we should reuse it
+		// TODO: to look closer and decide whether we should reuse it from EKF2
 		//const float geoid_height = altitude_ellipsoid - altitude_amsl;
 
 		//if (_last_geoid_height_update_us == 0) {

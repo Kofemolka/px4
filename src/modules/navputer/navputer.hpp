@@ -180,7 +180,7 @@ private:
 	void UpdateMagSample(ekf2_timestamps_s &ekf2_timestamps);
 	void UpdateBaroSample(ekf2_timestamps_s &ekf2_timestamps);
 	void UpdateRangingBeaconSample(ekf2_timestamps_s &ekf2_timestamps);
-	void UpdateGpsSample(ekf2_timestamps_s &ekf2_timestamps);
+	void UpdateGpsSample(ekf2_timestamps_s &ekf2_timestamps, const GnssSpoofingDetector::SpoofReport& report);
 
 	void UpdateCalibration(const hrt_abstime &timestamp, InFlightCalibration &cal, const matrix::Vector3f &bias,
 			       const matrix::Vector3f &bias_variance, float bias_limit, bool bias_valid, bool learning_valid);

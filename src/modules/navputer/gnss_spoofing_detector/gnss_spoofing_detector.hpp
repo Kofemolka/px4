@@ -57,9 +57,16 @@
 class GnssSpoofingDetector
 {
 public:
+	struct SpoofReport
+	{
+		GnssSpoofingState state{GnssSpoofingState::NoOrigin};
+		float pos_stddev_mult{1.f};
+		float vel_stddev_mult{1.f};
+	};
+public:
 	void update(const DeltaVelocityEarth &imu_ned);
 	void setGnssInstance(const int gnss_instance);
-	GnssSpoofingState state() const;
+	SpoofReport report() const;
 private:
 	void maybeUpdateOrigin();
 	void maybeFuseGnss();

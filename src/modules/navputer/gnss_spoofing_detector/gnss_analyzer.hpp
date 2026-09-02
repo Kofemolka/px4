@@ -56,6 +56,9 @@ enum class GnssSpoofingState
 
 namespace GnssAnalyzerTypes
 {
+constexpr float kSpoofThreshold = 0.8f;
+constexpr float kUnspoofThreshold = 0.2f;
+
 constexpr uint64_t kGpsFreqHz = 8;
 constexpr uint64_t kImuFreqHz = 300;
 constexpr uint64_t kTwiceGpsPeriodUs = 2'000'000ULL / kGpsFreqHz;
@@ -168,6 +171,7 @@ public:
 	// input
 public:
 	GnssSpoofingState state() const;
+	float suspicion() const;
 	void reset(bool origin_valid);
 	void pushIMU(const DeltaVelocityEarth &sample);
 	void pushGnss(const GnssKalmanFilter::Measurement &sample);

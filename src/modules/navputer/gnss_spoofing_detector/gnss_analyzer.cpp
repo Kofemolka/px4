@@ -47,8 +47,6 @@ constexpr float kRawVelPosSevereError = 3.0f;
 
 constexpr float kSafeSuspicionDecreasePerWindow = 0.1f;
 constexpr float kMaxSuspicionIncreasePerWindow = 0.8f;
-constexpr float kSpoofThreshold = 0.8f;
-constexpr float kUnspoofThreshold = 0.2f;
 
 constexpr float kPosSafeNormalizedError = 2.5f;
 constexpr float kPosSevereNormalizedError = 5.f;
@@ -346,6 +344,15 @@ void GnssMlatPosAnalyzer::analyze(const GnssEndpointHistory &gnss_history,
 GnssSpoofingState GnssAnalyzer::state() const
 {
 	return _state;
+}
+
+float GnssAnalyzer::suspicion() const
+{
+	const float total_suspicion = math::max(
+		_imu_velocity_analyzer.suspicion(),
+		_raw_velocity_analyzer.suspicion(),
+		_position_analyzer.suspicion());
+	return total_suspicion;
 }
 
 void GnssAnalyzer::transitionTo(GnssSpoofingState new_state)
