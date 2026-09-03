@@ -11,6 +11,7 @@ public:
 	FusionController(ModuleParams *parent, FusionControl &fc);
 
 	void update(Ekf& _ekf);
+	void setGpsTrusted(bool trusted);
 
 protected:
 	virtual void updateParams() override;
@@ -22,6 +23,7 @@ private:
 
 	hrt_abstime _agp_last_origin_missing{0};
 	hrt_abstime _agp_last_other_source_missing{0};
+	bool _gps_trusted{false};
 
 	DEFINE_PARAMETERS(
 		// per-source fusion enable

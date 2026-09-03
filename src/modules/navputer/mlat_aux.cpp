@@ -160,7 +160,11 @@ bool MlatAux::selectProjectionCenter(const navput_local_position_s &local_pos, m
 	return true;
 }
 
-bool MlatAux::calcHdop(const matrix::Vector2f &from, const BeaconInput *inputs, int num_inputs, float &hdop)
+bool MlatAux::calcHdop(const matrix::Vector2f &from,
+			const BeaconInput *inputs,
+			int num_inputs,
+			float &hdop,
+			matrix::SquareMatrix<float, 2> *geometry_covariance)
 {
 	float hxx = 0.f;
 	float hyy = 0.f;
@@ -193,7 +197,19 @@ bool MlatAux::calcHdop(const matrix::Vector2f &from, const BeaconInput *inputs, 
 		return false;
 	}
 
-	hdop = sqrtf((hxx + hyy) / det);
+	const float q_nn = hyy / det;
+	const float q_ee = hxx / det;
+	const float q_ne = -hxy / det;
+
+	hdop = sqrtf(q_nn + q_ee);
+
+	if (geometry_covariance) {
+		(*geometry_covariance)(0, 0) = q_nn;
+		(*geometry_covariance)(0, 1) = q_ne;
+		(*geometry_covariance)(1, 0) = q_ne;
+		(*geometry_covariance)(1, 1) = q_ee;
+	}
+
 	return true;
 }
 
@@ -456,6 +472,7 @@ bool MlatAux::solve()
 		range *= distortion;
 
 		input.range = range;
+		input.range_accuracy = beacon.range_accuracy;
 		input.timestamp_sample = beacon.timestamp_sample;
 		latest_timestamp_sample = math::max(latest_timestamp_sample, beacon.timestamp_sample);
 		num_inputs++;
@@ -495,9 +512,11 @@ bool MlatAux::solve()
 	}
 
 	float solution_hdop = kMaxHdop;
-	calcHdop(solution.pos, inputs, num_inputs, solution_hdop);
-
-	const float hdop_factor = solution_hdop <= 3.0f ? 1.0f : fminf(10.0f, 1.0f + (solution_hdop - 3.0f) / 3.0f);
+	matrix::SquareMatrix<float, 2> geometry_covariance{};
+	if (!calcHdop(solution.pos, inputs, num_inputs, solution_hdop, &geometry_covariance))
+	{
+		return false;
+	}
 
 	double lat;
 	double lon;
@@ -506,6 +525,8 @@ bool MlatAux::solve()
 	_has_last_solution = true;
 	_last_solution_lat_lon = matrix::Vector2d(lat, lon);
 
+	const float eph = calculateMlatEph(inputs, num_inputs, solution.pos, geometry_covariance);
+
 	aux_global_position_s agp{};
 	agp.timestamp_sample = latest_timestamp_sample;
 	agp.id = kAgpId;
@@ -513,13 +534,82 @@ bool MlatAux::solve()
 	agp.lat = lat;
 	agp.lon = lon;
 	agp.alt = have_own_alt ? own_alt : NAN;
-	agp.eph = solution.residual * hdop_factor;
+	agp.eph = eph;
 	agp.epv = have_own_alt ? local_pos.epv : NAN;
 	agp.lat_lon_reset_counter = 0;
 	agp.timestamp = hrt_absolute_time();
+
 	_aux_global_position_pub.publish(agp);
 
 	return true;
+}
+
+float MlatAux::calculateMlatEph(const BeaconInput* const inputs,
+				const int num_inputs,
+				const matrix::Vector2f& solution_pos,
+				const matrix::SquareMatrix<float, 2>& geometry_covariance) const
+{
+	// Calculate stddev for mlat
+	float sum_sq_residual = 0.f;
+	int used_ranges = 0;
+
+	for (int i = 0; i < num_inputs; ++i)
+	{
+		const matrix::Vector2f delta = solution_pos - inputs[i].pos;
+		const float estimated_range = delta.norm();
+
+		if (estimated_range <= 0.f)
+		{
+			continue;
+		}
+
+		const float residual = estimated_range - inputs[i].range;
+
+		sum_sq_residual += residual * residual;
+		used_ranges++;
+	}
+
+	// conservative sigma_beac
+	float sigma_beac = 0.f;
+	for (int i = 0; i < num_inputs; ++i)
+	{
+		if (PX4_ISFINITE(inputs[i].range_accuracy)
+			&& inputs[i].range_accuracy > 0.f)
+		{
+			sigma_beac = math::max(sigma_beac, inputs[i].range_accuracy);
+		}
+	}
+
+	const int used_axis = 2; // North and East
+	const int degrees_of_freedom = used_ranges - used_axis;
+
+	float fit_variance = 0.f;
+	const float expected_variance = math::sq(sigma_beac);
+	if (degrees_of_freedom > 0)
+	{
+		fit_variance = sum_sq_residual / degrees_of_freedom;
+	}
+	const float range_variance = math::max(expected_variance, fit_variance);
+	const float sigma_dyn = sqrtf(range_variance);
+
+	const float q_nn = geometry_covariance(0, 0);
+	const float q_ee = geometry_covariance(1, 1);
+
+	const float sigma_n = sigma_dyn * sqrtf(q_nn);
+	const float sigma_e = sigma_dyn * sqrtf(q_ee);
+	const float eph = sqrtf(sigma_n * sigma_n + sigma_e * sigma_e);
+
+	PX4_DEBUG("MLAT: SSR=%.1f dof=%d sigma_range=%.1f "
+		"sigma_n=%.1f sigma_e=%.1f eph=%.1f",
+		static_cast<double>(sum_sq_residual),
+		degrees_of_freedom,
+		static_cast<double>(sigma_dyn),
+		static_cast<double>(sigma_n),
+		static_cast<double>(sigma_e),
+		static_cast<double>(eph));
+
+
+	return eph;
 }
 
 void MlatAux::update()

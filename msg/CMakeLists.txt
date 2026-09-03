@@ -293,6 +293,7 @@ set(msg_files
 	navput/NavputFusionControl.msg
 	navput/NavputLocalPosition.msg
 	navput/NavputStatusFlags.msg
+	navput/NavputGpsPosition.msg
 )
 list(SORT msg_files)
 
