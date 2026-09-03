@@ -584,11 +584,13 @@ float MlatAux::calculateMlatEph(const BeaconInput* const inputs,
 	const int degrees_of_freedom = used_ranges - used_axis;
 
 	float fit_variance = 0.f;
+	const float expected_variance = math::sq(sigma_beac);
 	if (degrees_of_freedom > 0)
 	{
 		fit_variance = sum_sq_residual / degrees_of_freedom;
 	}
-	const float sigma_dyn = sqrtf(math::sq(sigma_beac) + fit_variance);
+	const float range_variance = math::max(expected_variance, fit_variance);
+	const float sigma_dyn = sqrtf(range_variance);
 
 	const float q_nn = geometry_covariance(0, 0);
 	const float q_ee = geometry_covariance(1, 1);

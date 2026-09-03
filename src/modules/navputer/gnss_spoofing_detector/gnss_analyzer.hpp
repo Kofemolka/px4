@@ -76,9 +76,12 @@ constexpr size_t kTrustedPosQueueSize = 2;
 struct GnssEndpoint
 {
 	uint64_t time_us{0};
-	matrix::Vector3f gnss_position_ned{};	matrix::Vector3f gnss_position_ned_variance{};
+	matrix::Vector3f gnss_position_ned{};
+	matrix::Vector3f gnss_position_ned_variance{};
 	matrix::Vector3f gnss_velocity_ned{};
+	matrix::Vector3f gnss_velocity_ned_variance{};
 	matrix::Vector3f imu_cumulative_delta_velocity_ned{};
+	matrix::Vector3f imu_cumulative_delta_velocity_variance{};
 };
 struct GnssRaw
 {
@@ -90,6 +93,7 @@ struct IMUCumulativeVelocityEndpoint
 {
 	uint64_t time_us{0};
 	matrix::Vector3f cumulative_velocity{};
+	matrix::Vector3f cumulative_velocity_variance{};
 };
 struct TrustedPositionSample
 {
@@ -191,6 +195,7 @@ private:
 	GnssAnalyzerTypes::TrustedPositionHistory _trusted_position_history;
 
 	matrix::Vector3f _imu_cumulative_velocity_ned{};
+	matrix::Vector3f _imu_cumulative_velocity_variance{};
 
 	GnssImuDeltaVelocityAnalyzer _imu_velocity_analyzer;
 	RawGnssVelocityAnalyzer _raw_velocity_analyzer;

@@ -40,16 +40,15 @@ namespace
 {
 constexpr uint64_t kOldestPossibleSampleToCompareUs = 2'500'000;
 
-constexpr float kVelSafeError = 0.4f;
-constexpr float kVelSevereError = 1.2f;
+constexpr float kVelSafeSigma = 1.0f;
+constexpr float kVelSevereSigma = 3.0f;
 constexpr float kRawVelPosSafeError = 1.0f;
 constexpr float kRawVelPosSevereError = 3.0f;
-
 constexpr float kSafeSuspicionDecreasePerWindow = 0.1f;
 constexpr float kMaxSuspicionIncreasePerWindow = 0.8f;
 
-constexpr float kPosSafeNormalizedError = 2.5f;
-constexpr float kPosSevereNormalizedError = 5.f;
+constexpr float kPosSafeSigma = 2.5f;
+constexpr float kPosSevereSigma = 5.f;
 constexpr float kSafePositionSuspicionDecrease = 0.1f;
 constexpr float kMaxPositionSuspicionIncrease = 0.4f;
 constexpr uint64_t kPosMaxGnssInterpolationGapUs = 250'000;
@@ -163,9 +162,21 @@ void GnssImuDeltaVelocityAnalyzer::analyze(const GnssEndpointHistory &history)
 	const matrix::Vector3f imu_delta_velocity = recent.imu_cumulative_delta_velocity_ned - old.imu_cumulative_delta_velocity_ned;
 
 	const matrix::Vector3f residual = gnss_delta_velocity - imu_delta_velocity;
-	const float error = sqrtf(residual(0) * residual(0) + residual(1) * residual(1));
+	const matrix::Vector3f gnss_delta_velocity_variance = recent.gnss_velocity_ned_variance + old.gnss_velocity_ned_variance;
+	const matrix::Vector3f imu_delta_velocity_variance = recent.imu_cumulative_delta_velocity_variance - old.imu_cumulative_delta_velocity_variance;
+	const matrix::Vector3f residual_variance = gnss_delta_velocity_variance + imu_delta_velocity_variance;
 
-	updateWindowedSuspicion(error, kVelSafeError, kVelSevereError, window_fraction);
+	if (!PX4_ISFINITE(residual_variance(0))
+		|| !PX4_ISFINITE(residual_variance(1))
+		|| residual_variance(0) <= 0.f
+		|| residual_variance(1) <= 0.f)
+	{
+		return;
+	}
+
+	const float error = sqrtf(residual(0) * residual(0) / residual_variance(0) + residual(1) * residual(1) / residual_variance(1));
+
+	updateWindowedSuspicion(error, kVelSafeSigma, kVelSevereSigma, window_fraction);
 	_last_analysis_time_us = recent.time_us;
 }
 
@@ -189,8 +200,7 @@ void RawGnssVelocityAnalyzer::analyze(const GnssRawHistory &history)
 	GnssRaw recent;
 	GnssRaw old;
 
-	if (!grabSamplesForWindow(history, recent, old, kVelWindowDurationUs,
-			kOldestPossibleSampleToCompareUs))
+	if (!grabSamplesForWindow(history, recent, old, kVelWindowDurationUs, kOldestPossibleSampleToCompareUs))
 	{
 		return;
 	}
@@ -202,8 +212,7 @@ void RawGnssVelocityAnalyzer::analyze(const GnssRawHistory &history)
 		return;
 	}
 
-	const matrix::Vector3f velocity_from_position =
-		(recent.gnss_position_ned - old.gnss_position_ned) / window_dt_s;
+	const matrix::Vector3f velocity_from_position = (recent.gnss_position_ned - old.gnss_position_ned) / window_dt_s;
 	const auto old_index = history.findLastAtOrBefore(old.time_us);
 	const auto recent_index = history.findLastAtOrBefore(recent.time_us);
 
@@ -221,8 +230,7 @@ void RawGnssVelocityAnalyzer::analyze(const GnssRawHistory &history)
 			return;
 		}
 
-		integrated_position_change += (a.gnss_velocity_ned + b.gnss_velocity_ned)
-			* (0.5f * interval_dt_s);
+		integrated_position_change += (a.gnss_velocity_ned + b.gnss_velocity_ned) * (0.5f * interval_dt_s);
 	}
 
 	const matrix::Vector3f reported_average_velocity = integrated_position_change / window_dt_s;
@@ -247,14 +255,14 @@ void GnssMlatPosAnalyzer::updateSuspicion(float normalized_error)
 {
 	float suspicion_delta = 0.f;
 
-	if (normalized_error <= kPosSafeNormalizedError)
+	if (normalized_error <= kPosSafeSigma)
 	{
 		suspicion_delta = -kSafePositionSuspicionDecrease;
 	}
 	else
 	{
-		const float severity = math::constrain((normalized_error - kPosSafeNormalizedError)
-			/ (kPosSevereNormalizedError - kPosSafeNormalizedError), 0.f, 1.f);
+		const float severity = math::constrain((normalized_error - kPosSafeSigma)
+			/ (kPosSevereSigma - kPosSafeSigma), 0.f, 1.f);
 		suspicion_delta = kMaxPositionSuspicionIncrease * severity;
 	}
 
@@ -348,11 +356,10 @@ GnssSpoofingState GnssAnalyzer::state() const
 
 float GnssAnalyzer::suspicion() const
 {
-	const float total_suspicion = math::max(
+	return math::max(
 		_imu_velocity_analyzer.suspicion(),
 		_raw_velocity_analyzer.suspicion(),
 		_position_analyzer.suspicion());
-	return total_suspicion;
 }
 
 void GnssAnalyzer::transitionTo(GnssSpoofingState new_state)
@@ -391,6 +398,7 @@ void GnssAnalyzer::reset(bool origin_valid)
 	_gnss_raw_history.reset();
 	_trusted_position_history.reset();
 	_imu_cumulative_velocity_ned.setZero();
+	_imu_cumulative_velocity_variance.setZero();
 
 	const float initial_suspicion = origin_valid ? kSpoofThreshold : 0.f;
 	_imu_velocity_analyzer.reset(initial_suspicion);
@@ -408,9 +416,11 @@ void GnssAnalyzer::pushIMU(const DeltaVelocityEarth &sample)
 	}
 
 	_imu_cumulative_velocity_ned += sample.delta_velocity_ned;
+	_imu_cumulative_velocity_variance += sample.delta_velocity_variance_ned;
 	_high_freq_imu_history.push(IMUCumulativeVelocityEndpoint{
 		.time_us = sample.time_us,
-		.cumulative_velocity = _imu_cumulative_velocity_ned});
+		.cumulative_velocity = _imu_cumulative_velocity_ned,
+		.cumulative_velocity_variance = _imu_cumulative_velocity_variance});
 }
 
 void GnssAnalyzer::pushTrustedPosition(const TrustedPositionSample &sample)
@@ -469,7 +479,14 @@ void GnssAnalyzer::pushGnss(const GnssKalmanFilter::Measurement &sample)
 		.gnss_position_ned = {state(0), state(1), state(2)},
 		.gnss_position_ned_variance = {covariance(0, 0), covariance(1, 1), covariance(2, 2)},
 		.gnss_velocity_ned = {state(3), state(4), state(5)},
-		.imu_cumulative_delta_velocity_ned = imu_velocity});
+		.gnss_velocity_ned_variance = {covariance(3, 3), covariance(4, 4), covariance(5, 5)},
+		.imu_cumulative_delta_velocity_ned = imu_velocity,
+		.imu_cumulative_delta_velocity_variance = lerp(
+			before.cumulative_velocity_variance,
+			after.cumulative_velocity_variance,
+			before.time_us,
+			after.time_us,
+			sample.time_us)});
 
 	if (_state != GnssSpoofingState::NoOrigin)
 	{

@@ -160,14 +160,15 @@ void GnssSpoofingDetector::maybeGrabTrustedPosition()
 		}
 
 		const matrix::Vector2f position_ne = _origin_projection.project(aux_global_pos.lat, aux_global_pos.lon);
-		const float position_variance = aux_global_pos.eph * aux_global_pos.eph;
+		// splitting total variance between N and E
+		const float position_variance_per_axis = aux_global_pos.eph * aux_global_pos.eph * 0.5f;
 
 		_analyzer.pushTrustedPosition(GnssAnalyzerTypes::TrustedPositionSample{
 			.time_us = time_us,
 			.position_ne = position_ne,
 			.position_variance_ne = {
-				position_variance,
-				position_variance
+				position_variance_per_axis,
+				position_variance_per_axis
 			}
 		});
 	}
