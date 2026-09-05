@@ -9,3 +9,7 @@ ttyACM0 USB
 
 # Sine.Mono
 UART1 - S1, 57600, Mavlink, [ ] Swap Rx/Tx
+
+# GPS
+Currently NMEA only, 115200
+
