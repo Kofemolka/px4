@@ -81,6 +81,7 @@ px4_add_module(
 
 	DEPENDS
 		${NAVPUTER_LIBS}
+		lat_lon_alt
 	UNITY_BUILD
 	)
 

@@ -237,7 +237,7 @@ ElevationInitializer::LookupResult ElevationInitializer::lookupInFile(const int 
 
 	const uint64_t offset_in_bytes = pixel_index * sizeof(int16_t);
 
-	if (offset_in_bytes > file_stat.st_size - sizeof(int16_t)) {
+	if (offset_in_bytes > static_cast<uint64_t>(file_stat.st_size) - sizeof(int16_t)) {
 		PX4_WARN("ElevationInitializer: HGT offset overflow in %s", path);
 		return res;
 	}

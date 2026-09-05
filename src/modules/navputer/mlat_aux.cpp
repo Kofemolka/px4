@@ -1,8 +1,7 @@
 #include "mlat_aux.hpp"
 
-#include <cfloat>
+#include <float.h>
 #include <cmath>
-#include <utility>
 
 using namespace time_literals;
 
@@ -237,7 +236,7 @@ void MlatAux::solveCandidate(Candidate &candidate, const BeaconInput *inputs, in
 		}
 	}
 
-	candidate.residual = fsqrt(residual);
+	candidate.residual = sqrtf(residual);
 
 	if (residual > kMaxResidual2) {
 		candidate.valid = false;
@@ -342,7 +341,9 @@ bool MlatAux::evaluate(Candidate (&candidates)[kNumSeeds], bool have_last_pos, c
 	}
 
 	if (candidates[second].votes > candidates[best].votes + 1) {
-		std::swap(best, second);
+		const int tmp = best;
+		best = second;
+		second = tmp;
 	}
 
 	if (fabsf(candidates[best].residual - candidates[second].residual) <= kResidualEpsilon) {
