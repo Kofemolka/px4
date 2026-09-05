@@ -33,3 +33,6 @@ param set-default IMU_GYRO_RATEMAX 2000
 # it's NMEA-only, fixed at 115200 baud
 param set-default GPS_1_PROTOCOL 6
 param set-default SER_GPS1_BAUD 115200
+
+# Disable EKF2
+param set EKF2_EN 0
