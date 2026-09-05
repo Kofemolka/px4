@@ -3,10 +3,12 @@
 # DICH specific board extras init
 #------------------------------------------------------------------------------
 
-if ! param compare OSD_ATXXXX_CFG 0
-then
-	atxxxx start -s
-fi
+# if ! param compare OSD_ATXXXX_CFG 0
+# then
+# 	atxxxx start -s
+# fi
 
-# DShot telemetry is always on UART7
-dshot telemetry -d /dev/ttyS5
+# # DShot telemetry is always on UART7
+# dshot telemetry -d /dev/ttyS5
+
+navputer start

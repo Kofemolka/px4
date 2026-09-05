@@ -4,16 +4,11 @@
 #------------------------------------------------------------------------------
 board_adc start
 
-# The KakuteH7 v1 comes by default with an ICM20689,
-# but there might also be an MPU6000
-if ! mpu6000 -R 6 -s start
-then
-	icm42688p -R 6 -s start
-fi
+icm42688p -R 6 -s start
 
-if ! bmp280 -X start
-then
-	spa06 -X start
-fi
+spa06 -X start
 
-# TODO: start magnetometer
+# AK09911C is not register-compatible with the AK09916 family, but its WIA2 ID
+# is recognized (AK09916.cpp probe()) and forced onto the AK09916 read/scale
+# path as the closest available driver.
+ak09916 -X -a 0x0D start
