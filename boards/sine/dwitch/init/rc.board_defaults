@@ -34,5 +34,8 @@ param set-default IMU_GYRO_RATEMAX 2000
 param set-default GPS_1_PROTOCOL 6
 param set-default SER_GPS1_BAUD 115200
 
-# Disable EKF2
+# disable EKF2
 param set EKF2_EN 0
+
+# disable I2C probing
+param set-default SENS_EXT_I2C_PRB 0
