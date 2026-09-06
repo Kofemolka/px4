@@ -112,6 +112,17 @@ int AK09916::probe()
 			_device = AKTYPE::AK09918;
 			return PX4_OK;
 
+		case AKTYPE::AK09911:
+			// Not a real AK09916: forced match on the closest-available driver. The
+			// AK09911's ASA fuse-ROM per-axis sensitivity trim is not applied, so raw
+			// readings use AK09916's fixed scale instead of a calibrated one. PX4's
+			// onboard compass calibration (per-axis scale/offset fit) largely
+			// compensates for this, but expect it to be less accurate out of the box
+			// than a real AK09916.
+			PX4_WARN("AK09911 detected, forcing AK09916 driver as closest match");
+			_device = AKTYPE::AK09911;
+			return PX4_OK;
+
 		default:
 			PX4_DEBUG("unexpected WIA2 0x%02x", WIA2);
 
@@ -265,8 +276,20 @@ bool AK09916::Configure()
 		}
 	}
 
-	// mag resolution is 1.5 milli Gauss per bit (0.15 μT/LSB)
-	_px4_mag.set_scale(1.5e-3f);
+	switch (_device) {
+	case AKTYPE::AK09911:
+		// AK09911 forced onto this driver (see probe()): nominal 0.6 μT/LSB, roughly
+		// 4x coarser than a real AK09916. ASA per-axis fuse-ROM trim still isn't
+		// applied, so this is approximate, but it's needed to land calibration's
+		// fitted field magnitude inside lm_fit.cpp's accepted [0.2, 0.7] Gauss range.
+		_px4_mag.set_scale(6e-3f);
+		break;
+
+	default:
+		// mag resolution is 1.5 milli Gauss per bit (0.15 μT/LSB)
+		_px4_mag.set_scale(1.5e-3f);
+		break;
+	}
 
 	return success;
 }

@@ -68,6 +68,8 @@ private:
 		AK09916 = 0X09,
 		AK09915 = 0X10,
 		AK09918 = 0x0c,
+		AK09911 = 0x05, // not register-compatible (no ASA fuse-ROM sensitivity calibration);
+				// forced to run the AK09916 read/scale path as the closest available driver.
 	};
 
 	constexpr char const *device_name()
@@ -81,6 +83,9 @@ private:
 
 		case AKTYPE::AK09918:
 			return "AK09918";
+
+		case AKTYPE::AK09911:
+			return "AK09911 (forced, uncalibrated ASA)";
 
 		default:
 			return "Unknown";
