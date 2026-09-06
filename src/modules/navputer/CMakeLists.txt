@@ -96,3 +96,9 @@ px4_add_module(
 	UNITY_BUILD
 	)
 
+# UNITY_BUILD compiles the real per-file objects into modules__navputer_original,
+# which px4_add_module() never wires up to parameters codegen (only the merged
+# unity target gets that, via prebuild_targets) - add it explicitly so a clean
+# build can't race ahead of px4_parameters.hpp generation.
+add_dependencies(modules__navputer_original parameters_header)
+
