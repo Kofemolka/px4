@@ -122,6 +122,8 @@ void GnssSpoofingDetector::maybeFuseGnss()
 				    gps.s_variance_m_s * gps.s_variance_m_s,
 				    gps.s_variance_m_s * gps.s_variance_m_s}
 		});
+
+		publishGnssKfSnapshot();
 	}
 }
 
@@ -172,6 +174,25 @@ void GnssSpoofingDetector::maybeGrabMlatPosition()
 			}
 		});
 	}
+}
+
+void GnssSpoofingDetector::publishGnssKfSnapshot()
+{
+	const auto& snapshot = _analyzer.gnssKFSnapshot();
+
+	navput_spoof_detector_gnss_kf_s msg{};
+	msg.timestamp = hrt_absolute_time();
+	msg.timestamp_sample = snapshot.time_us;
+
+	msg.ref_lat = _origin_lat_deg;
+	msg.ref_lon = _origin_lon_deg;
+
+	snapshot.position_ned.copyTo(msg.position_ned);
+	snapshot.velocity_ned.copyTo(msg.velocity_ned);
+	snapshot.position_variance.copyTo(msg.position_variance);
+	snapshot.velocity_variance.copyTo(msg.velocity_variance);
+
+	_gnss_kf_pub.publish(msg);
 }
 
 void GnssSpoofingDetector::update(const DeltaVelocityEarth &imu_ned)

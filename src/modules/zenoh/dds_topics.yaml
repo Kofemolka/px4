@@ -164,6 +164,9 @@ publications:
   - topic: /fmu/out/navput_gps_position
     type: px4_msgs::msg::NavputGpsPosition
 
+  - topic: /fmu/out/navput_spoof_detector_gnss_kf
+    type: px4_msgs::msg::NavputSpoofDetectorGnssKf
+
   - topic: /fmu/out/estimator_aid_src_aux_global_position
     type: px4_msgs::msg::EstimatorAidSource2d
 

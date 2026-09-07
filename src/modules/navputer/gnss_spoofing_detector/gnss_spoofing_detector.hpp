@@ -41,6 +41,7 @@
 #ifndef GNSS_SPOOFING_DETECTOR_HPP
 #define GNSS_SPOOFING_DETECTOR_HPP
 
+#include <uORB/Publication.hpp>
 #include <uORB/Subscription.hpp>
 #include <uORB/SubscriptionMultiArray.hpp>
 #include <uORB/topics/sensor_gps.h>
@@ -48,6 +49,7 @@
 #include <uORB/topics/navput_status_flags.h>
 #include <uORB/topics/ranging_beacon.h>
 #include <uORB/topics/aux_global_position.h>
+#include <uORB/topics/navput_spoof_detector_gnss_kf.h>
 #include <drivers/drv_hrt.h>
 #include <lib/geo/geo.h>
 #include <ekf.h>
@@ -71,6 +73,7 @@ private:
 	void maybeUpdateOrigin();
 	void maybeFuseGnss();
 	void maybeGrabMlatPosition();
+	void publishGnssKfSnapshot();
 private:
 	GnssAnalyzer _analyzer;
 
@@ -85,6 +88,9 @@ private:
 	uORB::Subscription _local_position_sub{ORB_ID(navput_local_position)};
 	uORB::Subscription _status_sub{ORB_ID(navput_status_flags)};
 	uORB::SubscriptionMultiArray<aux_global_position_s, 4> _aux_global_pos_subs{ORB_ID::aux_global_position};
+
+	// publication
+	uORB::Publication<navput_spoof_detector_gnss_kf_s> _gnss_kf_pub{ORB_ID(navput_spoof_detector_gnss_kf)};
 };
 
 #endif

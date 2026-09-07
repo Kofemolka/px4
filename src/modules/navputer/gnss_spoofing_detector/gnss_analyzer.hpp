@@ -102,6 +102,16 @@ struct MlatPositionSample
 	matrix::Vector2f position_variance_ne;
 };
 
+struct GnssKFSnapshot
+{
+	uint64_t time_us{0};
+	bool valid{false};
+	matrix::Vector3f position_ned{};
+	matrix::Vector3f velocity_ned{};
+	matrix::Vector3f position_variance{};
+	matrix::Vector3f velocity_variance{};
+};
+
 using CummulativeImuHistory = HistoryRingBuffer<
 	ImuCumulativeVelocityEndpoint,
 	GnssAnalyzerTypes::kHighFreqImuQueueSize>;
@@ -192,6 +202,7 @@ class GnssAnalyzer
 public:
 	GnssSpoofingState state() const;
 	float suspicion() const;
+	const GnssAnalyzerTypes::GnssKFSnapshot &gnssKFSnapshot() const;
 
 	void reset(bool origin_valid);
 
@@ -206,6 +217,7 @@ private:
 private:
 	GnssSpoofingState _state{GnssSpoofingState::NoOrigin};
 	GnssKalmanFilter _gnss_kf;
+	GnssAnalyzerTypes::GnssKFSnapshot _gnss_kf_snapshot{};
 
 	GnssAnalyzerTypes::CummulativeImuHistory _high_freq_imu_history;
 	GnssAnalyzerTypes::GnssEndpointHistory _gnss_endpoint_history;

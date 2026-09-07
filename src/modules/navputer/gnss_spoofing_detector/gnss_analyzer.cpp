@@ -373,6 +373,11 @@ float GnssAnalyzer::suspicion() const
 		_position_analyzer.suspicion());
 }
 
+const GnssAnalyzerTypes::GnssKFSnapshot &GnssAnalyzer::gnssKFSnapshot() const
+{
+	return _gnss_kf_snapshot;
+}
+
 void GnssAnalyzer::transitionTo(GnssSpoofingState new_state)
 {
 	if (new_state != _state)
@@ -411,6 +416,7 @@ void GnssAnalyzer::maybeLogSuspicion()
 void GnssAnalyzer::reset(bool origin_valid)
 {
 	_gnss_kf.reset();
+	_gnss_kf_snapshot = {};
 	_high_freq_imu_history.reset();
 	_gnss_endpoint_history.reset();
 	_gnss_raw_history.reset();
@@ -475,6 +481,16 @@ void GnssAnalyzer::pushGnss(const GnssKalmanFilter::Measurement &sample)
 		return;
 	}
 
+	const auto &state = _gnss_kf.state();
+	const auto &covariance = _gnss_kf.covariance();
+	_gnss_kf_snapshot = {
+		.time_us = sample.time_us,
+		.position_ned = {state(0), state(1), state(2)},
+		.velocity_ned = {state(3), state(4), state(5)},
+		.position_variance = {covariance(0, 0), covariance(1, 1), covariance(2, 2)},
+		.velocity_variance = {covariance(3, 3), covariance(4, 4), covariance(5, 5)}
+	};
+
 	const auto bracket = _high_freq_imu_history.findBracket(sample.time_us);
 
 	if (!bracket)
@@ -491,15 +507,12 @@ void GnssAnalyzer::pushGnss(const GnssKalmanFilter::Measurement &sample)
 		before.time_us,
 		after.time_us,
 		sample.time_us);
-	const auto& state = _gnss_kf.state();
-	const auto& covariance = _gnss_kf.covariance();
-
 	_gnss_endpoint_history.push(GnssEndpoint{
 		.time_us = sample.time_us,
-		.gnss_position_ned = {state(0), state(1), state(2)},
-		.gnss_position_ned_variance = {covariance(0, 0), covariance(1, 1), covariance(2, 2)},
-		.gnss_velocity_ned = {state(3), state(4), state(5)},
-		.gnss_velocity_ned_variance = {covariance(3, 3), covariance(4, 4), covariance(5, 5)},
+		.gnss_position_ned = _gnss_kf_snapshot.position_ned,
+		.gnss_position_ned_variance = _gnss_kf_snapshot.position_variance,
+		.gnss_velocity_ned = _gnss_kf_snapshot.velocity_ned,
+		.gnss_velocity_ned_variance = _gnss_kf_snapshot.velocity_variance,
 		.imu_cumulative_delta_velocity_ned = imu_velocity,
 		.imu_cumulative_delta_velocity_variance = lerp(
 			before.cumulative_velocity_variance,
@@ -551,4 +564,5 @@ void GnssAnalyzer::resetInternalGnssKF()
 {
 	_gnss_endpoint_history.reset();
 	_gnss_kf.reset();
+	_gnss_kf_snapshot = {};
 }
