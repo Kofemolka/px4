@@ -39,3 +39,5 @@ param set EKF2_EN 0
 
 # disable I2C probing
 param set-default SENS_EXT_I2C_PRB 0
+
+param set-default SDLOG_PROFILE 1
