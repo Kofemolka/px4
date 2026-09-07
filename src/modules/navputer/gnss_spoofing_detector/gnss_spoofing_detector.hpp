@@ -70,7 +70,7 @@ public:
 private:
 	void maybeUpdateOrigin();
 	void maybeFuseGnss();
-	void maybeGrabTrustedPosition();
+	void maybeGrabMlatPosition();
 private:
 	GnssAnalyzer _analyzer;
 

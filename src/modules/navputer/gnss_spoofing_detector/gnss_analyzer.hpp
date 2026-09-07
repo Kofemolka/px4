@@ -70,7 +70,7 @@ constexpr uint64_t kVelWindowDurationUs = 2'000'000; // 2 second window
 constexpr size_t kHighFreqIMUQueueSize = (kTwiceGpsPeriodUs / kImuPeriodUs) * 2ULL;
 // Twice larger than the sufficient gnss history
 constexpr size_t kGnssQueueSize = (kVelWindowDurationUs / 1'000'000ULL) * kGpsFreqHz * 2ULL;
-constexpr size_t kTrustedPosQueueSize = 2;
+constexpr size_t kMlatPosQueueSize = 2;
 
 // internal
 struct GnssEndpoint
@@ -95,7 +95,7 @@ struct IMUCumulativeVelocityEndpoint
 	matrix::Vector3f cumulative_velocity{};
 	matrix::Vector3f cumulative_velocity_variance{};
 };
-struct TrustedPositionSample
+struct MlatPositionSample
 {
 	uint64_t time_us;
 	matrix::Vector2f position_ne;
@@ -111,11 +111,9 @@ using GnssEndpointHistory = HistoryRingBuffer<
 using GnssRawHistory = HistoryRingBuffer<
 	GnssRaw,
 	GnssAnalyzerTypes::kGnssQueueSize>;
-using TrustedPositionHistory = HistoryRingBuffer<
-	TrustedPositionSample,
-	GnssAnalyzerTypes::kTrustedPosQueueSize>;
-} // GnssAnalyzerTypes
-
+using MlatPositionHistory = HistoryRingBuffer<
+	MlatPositionSample,
+	GnssAnalyzerTypes::kMlatPosQueueSize>;
 
 class BasicAnomalyAnalyzer
 {
@@ -124,10 +122,10 @@ public:
 	float suspicion() const;
 
 protected:
-	void updateWindowedSuspicion(float error, float safe_error,
-					     float severe_error, float window_fraction);
+	void updateWindowedSuspicion(float error, float safe_error, float severe_error, float window_fraction);
 
 	float _suspicion{0.f};
+	uint64_t _last_analysis_time_us{0};
 };
 
 class GnssImuDeltaVelocityAnalyzer final : public BasicAnomalyAnalyzer
@@ -135,19 +133,13 @@ class GnssImuDeltaVelocityAnalyzer final : public BasicAnomalyAnalyzer
 public:
 	void reset(float initial_suspicion);
 	void analyze(const GnssAnalyzerTypes::GnssEndpointHistory &history);
-
-private:
-	uint64_t _last_analysis_time_us{0};
 };
 
-class RawGnssVelocityAnalyzer final : public BasicAnomalyAnalyzer
+class GnssVelocityConsistencyAnalyzer final : public BasicAnomalyAnalyzer
 {
 public:
 	void reset(float initial_suspicion);
 	void analyze(const GnssAnalyzerTypes::GnssRawHistory &history);
-
-private:
-	uint64_t _last_analysis_time_us{0};
 };
 
 class GnssMlatPosAnalyzer final : public BasicAnomalyAnalyzer
@@ -155,36 +147,60 @@ class GnssMlatPosAnalyzer final : public BasicAnomalyAnalyzer
 public:
 	void reset(float initial_suspicion);
 	void analyze(const GnssAnalyzerTypes::GnssEndpointHistory &gnss_history,
-		     const GnssAnalyzerTypes::TrustedPositionHistory &trusted_history);
+		     const GnssAnalyzerTypes::MlatPositionHistory &mlat_history);
+	uint64_t lastSuccessfulAnalysisTime() const;
 
 private:
 	void updateSuspicion(float normalized_error);
 
 	bool grabSamples(const GnssAnalyzerTypes::GnssEndpointHistory &gnss_history,
-			 const GnssAnalyzerTypes::TrustedPositionHistory &trusted_history,
-			 GnssAnalyzerTypes::TrustedPositionSample &trusted,
+			 const GnssAnalyzerTypes::MlatPositionHistory &mlat_history,
+			 GnssAnalyzerTypes::MlatPositionSample &mlat,
 			 GnssAnalyzerTypes::GnssEndpoint &before,
 			 GnssAnalyzerTypes::GnssEndpoint &after);
-
-	uint64_t _last_analysis_time_us{0};
+private:
+	uint64_t _last_successful_analysis_time_us{0};
 };
+
+struct IndependentRecoveryLatch
+{
+	bool canBeTrusted(const uint64_t last_successful_mlat_analysis_us) const
+	{
+		return !_recovery_needs_mlat_confirmation
+			|| last_successful_mlat_analysis_us > _recovery_required_after_us;
+	}
+
+	void setNeedForRecoveryAfter(const uint64_t gnss_time_us)
+	{
+		_recovery_needs_mlat_confirmation = true;
+		_recovery_required_after_us = gnss_time_us;
+	}
+
+	void clear()
+	{
+		_recovery_needs_mlat_confirmation = false;
+	}
+
+	bool _recovery_needs_mlat_confirmation{false};
+	uint64_t _recovery_required_after_us{0};
+};
+
+} // namespace GnssAnalyzerTypes
 
 class GnssAnalyzer
 {
-public:
-	// input
 public:
 	GnssSpoofingState state() const;
 	float suspicion() const;
 	void reset(bool origin_valid);
 	void pushIMU(const DeltaVelocityEarth &sample);
 	void pushGnss(const GnssKalmanFilter::Measurement &sample);
-	void pushTrustedPosition(const GnssAnalyzerTypes::TrustedPositionSample &sample);
+	void pushMlatPosition(const GnssAnalyzerTypes::MlatPositionSample &sample);
 private:
 	void transitionTo(GnssSpoofingState new_state);
 	void maybeLogSuspicion();
 
-	void recalculateState();
+	void recalculateState(const uint64_t last_gnss_sample);
 private:
 	GnssSpoofingState _state{GnssSpoofingState::NoOrigin};
 	GnssKalmanFilter _gnss_kf;
@@ -192,14 +208,16 @@ private:
 	GnssAnalyzerTypes::CummulativeImuHistory _high_freq_imu_history;
 	GnssAnalyzerTypes::GnssEndpointHistory _gnss_endpoint_history;
 	GnssAnalyzerTypes::GnssRawHistory _gnss_raw_history;
-	GnssAnalyzerTypes::TrustedPositionHistory _trusted_position_history;
+	GnssAnalyzerTypes::MlatPositionHistory _mlat_position_history;
+
+	GnssAnalyzerTypes::IndependentRecoveryLatch _recovery_latch;
 
 	matrix::Vector3f _imu_cumulative_velocity_ned{};
 	matrix::Vector3f _imu_cumulative_velocity_variance{};
 
-	GnssImuDeltaVelocityAnalyzer _imu_velocity_analyzer;
-	RawGnssVelocityAnalyzer _raw_velocity_analyzer;
-	GnssMlatPosAnalyzer _position_analyzer;
+	GnssAnalyzerTypes::GnssImuDeltaVelocityAnalyzer _imu_velocity_analyzer;
+	GnssAnalyzerTypes::GnssVelocityConsistencyAnalyzer _gnss_velocity_consistency_analyzer;
+	GnssAnalyzerTypes::GnssMlatPosAnalyzer _position_analyzer;
 
 	uint64_t _last_diaglog_us{0};
 };

@@ -125,7 +125,7 @@ void GnssSpoofingDetector::maybeFuseGnss()
 	}
 }
 
-void GnssSpoofingDetector::maybeGrabTrustedPosition()
+void GnssSpoofingDetector::maybeGrabMlatPosition()
 {
 	if (!_origin_valid)
 	{
@@ -163,7 +163,7 @@ void GnssSpoofingDetector::maybeGrabTrustedPosition()
 		// splitting total variance between N and E
 		const float position_variance_per_axis = aux_global_pos.eph * aux_global_pos.eph * 0.5f;
 
-		_analyzer.pushTrustedPosition(GnssAnalyzerTypes::TrustedPositionSample{
+		_analyzer.pushMlatPosition(GnssAnalyzerTypes::MlatPositionSample{
 			.time_us = time_us,
 			.position_ne = position_ne,
 			.position_variance_ne = {
@@ -179,7 +179,7 @@ void GnssSpoofingDetector::update(const DeltaVelocityEarth &imu_ned)
 	maybeUpdateOrigin();
 
 	_analyzer.pushIMU(imu_ned);
-	maybeGrabTrustedPosition();
+	maybeGrabMlatPosition();
 	maybeFuseGnss();
 }
 
