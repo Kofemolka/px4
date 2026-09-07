@@ -53,6 +53,7 @@ AK09916::~AK09916()
 	perf_free(_bad_register_perf);
 	perf_free(_bad_transfer_perf);
 	perf_free(_magnetic_sensor_overflow_perf);
+	perf_free(_drdy_not_ready_perf);
 }
 
 int AK09916::init()
@@ -84,6 +85,7 @@ void AK09916::print_status()
 	perf_print_counter(_bad_register_perf);
 	perf_print_counter(_bad_transfer_perf);
 	perf_print_counter(_magnetic_sensor_overflow_perf);
+	perf_print_counter(_drdy_not_ready_perf);
 }
 
 int AK09916::probe()
@@ -207,6 +209,10 @@ void AK09916::RunImpl()
 
 			bool success = false;
 
+			if (ret != PX4_OK) {
+				perf_count(_bad_transfer_perf);
+			}
+
 			if (ret == PX4_OK) {
 				if (buffer.ST2 & ST2_BIT::HOFL) {
 					perf_count(_magnetic_sensor_overflow_perf);
@@ -227,14 +233,24 @@ void AK09916::RunImpl()
 					if (_failure_count > 0) {
 						_failure_count--;
 					}
+
+				} else {
+					perf_count(_drdy_not_ready_perf);
 				}
 			}
 
 			if (!success) {
 				_failure_count++;
 
+				// AK09911 forced onto this driver (see probe()) occasionally misses
+				// DRDY on schedule; tolerate longer runs before forcing a full reset,
+				// since the reset itself (RESET -> WAIT_FOR_RESET -> CONFIGURE, each
+				// gated by a 100ms delay) is what turns a brief hiccup into a
+				// guaranteed failover trip against VehicleMagnetometer's 300ms timeout.
+				const uint8_t failure_limit = (_device == AKTYPE::AK09911) ? 50 : 10;
+
 				// full reset if things are failing consistently
-				if (_failure_count > 10) {
+				if (_failure_count > failure_limit) {
 					Reset();
 					return;
 				}
