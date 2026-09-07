@@ -178,7 +178,7 @@ void GnssSpoofingDetector::update(const DeltaVelocityEarth &imu_ned)
 {
 	maybeUpdateOrigin();
 
-	_analyzer.pushIMU(imu_ned);
+	_analyzer.pushImu(imu_ned);
 	maybeGrabMlatPosition();
 	maybeFuseGnss();
 }

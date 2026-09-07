@@ -67,7 +67,7 @@ constexpr uint64_t kImuPeriodUs = 1'000'000ULL / kImuFreqHz;
 constexpr uint64_t kVelWindowDurationUs = 2'000'000; // 2 second window
 
 // Twice larger than the sufficient imu history capacity that should encompass two GPS periods ~250 ms
-constexpr size_t kHighFreqIMUQueueSize = (kTwiceGpsPeriodUs / kImuPeriodUs) * 2ULL;
+constexpr size_t kHighFreqImuQueueSize = (kTwiceGpsPeriodUs / kImuPeriodUs) * 2ULL;
 // Twice larger than the sufficient gnss history
 constexpr size_t kGnssQueueSize = (kVelWindowDurationUs / 1'000'000ULL) * kGpsFreqHz * 2ULL;
 constexpr size_t kMlatPosQueueSize = 2;
@@ -89,7 +89,7 @@ struct GnssRaw
 	matrix::Vector3f gnss_position_ned{};
 	matrix::Vector3f gnss_velocity_ned{};
 };
-struct IMUCumulativeVelocityEndpoint
+struct ImuCumulativeVelocityEndpoint
 {
 	uint64_t time_us{0};
 	matrix::Vector3f cumulative_velocity{};
@@ -103,8 +103,8 @@ struct MlatPositionSample
 };
 
 using CummulativeImuHistory = HistoryRingBuffer<
-	IMUCumulativeVelocityEndpoint,
-	GnssAnalyzerTypes::kHighFreqIMUQueueSize>;
+	ImuCumulativeVelocityEndpoint,
+	GnssAnalyzerTypes::kHighFreqImuQueueSize>;
 using GnssEndpointHistory = HistoryRingBuffer<
 	GnssEndpoint,
 	GnssAnalyzerTypes::kGnssQueueSize>;
@@ -192,15 +192,17 @@ class GnssAnalyzer
 public:
 	GnssSpoofingState state() const;
 	float suspicion() const;
+
 	void reset(bool origin_valid);
-	void pushIMU(const DeltaVelocityEarth &sample);
+
+	void pushImu(const DeltaVelocityEarth &sample);
 	void pushGnss(const GnssKalmanFilter::Measurement &sample);
 	void pushMlatPosition(const GnssAnalyzerTypes::MlatPositionSample &sample);
 private:
 	void transitionTo(GnssSpoofingState new_state);
 	void maybeLogSuspicion();
-
 	void recalculateState(const uint64_t last_gnss_sample);
+	void resetInternalGnssKF();
 private:
 	GnssSpoofingState _state{GnssSpoofingState::NoOrigin};
 	GnssKalmanFilter _gnss_kf;

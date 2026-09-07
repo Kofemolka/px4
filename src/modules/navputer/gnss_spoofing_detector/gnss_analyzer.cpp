@@ -31,6 +31,7 @@
  ****************************************************************************/
 
 #include "gnss_analyzer.hpp"
+#include "px4_platform_common/defines.h"
 
 #include <drivers/drv_hrt.h>
 #include <matrix/Vector.hpp>
@@ -383,6 +384,11 @@ void GnssAnalyzer::transitionTo(GnssSpoofingState new_state)
 			static_cast<double>(_position_analyzer.suspicion()),
 			static_cast<int>(_recovery_latch._recovery_needs_mlat_confirmation));
 		_state = new_state;
+
+		if (new_state == GnssSpoofingState::Trusted)
+		{
+			resetInternalGnssKF();
+		}
 	}
 }
 
@@ -421,7 +427,7 @@ void GnssAnalyzer::reset(bool origin_valid)
 	transitionTo(origin_valid ? GnssSpoofingState::Untrusted : GnssSpoofingState::NoOrigin);
 }
 
-void GnssAnalyzer::pushIMU(const DeltaVelocityEarth &sample)
+void GnssAnalyzer::pushImu(const DeltaVelocityEarth &sample)
 {
 	if (!_high_freq_imu_history.empty() && _high_freq_imu_history.newest().time_us >= sample.time_us)
 	{
@@ -430,7 +436,7 @@ void GnssAnalyzer::pushIMU(const DeltaVelocityEarth &sample)
 
 	_imu_cumulative_velocity_ned += sample.delta_velocity_ned;
 	_imu_cumulative_velocity_variance += sample.delta_velocity_variance_ned;
-	_high_freq_imu_history.push(IMUCumulativeVelocityEndpoint{
+	_high_freq_imu_history.push(ImuCumulativeVelocityEndpoint{
 		.time_us = sample.time_us,
 		.cumulative_velocity = _imu_cumulative_velocity_ned,
 		.cumulative_velocity_variance = _imu_cumulative_velocity_variance});
@@ -473,20 +479,20 @@ void GnssAnalyzer::pushGnss(const GnssKalmanFilter::Measurement &sample)
 
 	if (!bracket)
 	{
-		PX4_WARN("GnssAnalyzer: cannot find the nearby IMU samples for this Gnss sample.");
+		PX4_WARN("GnssAnalyzer: cannot find the nearby Imu samples for this Gnss sample.");
 		return;
 	}
 
-	const IMUCumulativeVelocityEndpoint &before = _high_freq_imu_history.atOldestOffset(bracket->before);
-	const IMUCumulativeVelocityEndpoint &after = _high_freq_imu_history.atOldestOffset(bracket->after);
+	const ImuCumulativeVelocityEndpoint &before = _high_freq_imu_history.atOldestOffset(bracket->before);
+	const ImuCumulativeVelocityEndpoint &after = _high_freq_imu_history.atOldestOffset(bracket->after);
 	const matrix::Vector3f imu_velocity = lerp(
 		before.cumulative_velocity,
 		after.cumulative_velocity,
 		before.time_us,
 		after.time_us,
 		sample.time_us);
-	const auto &state = _gnss_kf.state();
-	const auto &covariance = _gnss_kf.covariance();
+	const auto& state = _gnss_kf.state();
+	const auto& covariance = _gnss_kf.covariance();
 
 	_gnss_endpoint_history.push(GnssEndpoint{
 		.time_us = sample.time_us,
@@ -539,4 +545,10 @@ void GnssAnalyzer::recalculateState(const uint64_t last_gnss_sample)
 		_recovery_latch.clear();
 		transitionTo(GnssSpoofingState::Trusted);
 	}
+}
+
+void GnssAnalyzer::resetInternalGnssKF()
+{
+	_gnss_endpoint_history.reset();
+	_gnss_kf.reset();
 }
