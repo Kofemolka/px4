@@ -461,6 +461,19 @@ void GnssAnalyzer::pushMlatPosition(const MlatPositionSample &sample)
 	}
 }
 
+void GnssAnalyzer::updateGnssKFSnapshot()
+{
+	const auto &state = _gnss_kf.state();
+	const auto &covariance = _gnss_kf.covariance();
+	_gnss_kf_snapshot = {
+		.time_us = _gnss_kf.lastUpdateTimeUs(),
+		.position_ned = {state(0), state(1), state(2)},
+		.velocity_ned = {state(3), state(4), state(5)},
+		.position_variance = {covariance(0, 0), covariance(1, 1), covariance(2, 2)},
+		.velocity_variance = {covariance(3, 3), covariance(4, 4), covariance(5, 5)}
+	};
+}
+
 void GnssAnalyzer::pushGnss(const GnssKalmanFilter::Measurement &sample)
 {
 	if (!_gnss_raw_history.empty() && sample.time_us <= _gnss_raw_history.newest().time_us)
@@ -481,15 +494,7 @@ void GnssAnalyzer::pushGnss(const GnssKalmanFilter::Measurement &sample)
 		return;
 	}
 
-	const auto &state = _gnss_kf.state();
-	const auto &covariance = _gnss_kf.covariance();
-	_gnss_kf_snapshot = {
-		.time_us = sample.time_us,
-		.position_ned = {state(0), state(1), state(2)},
-		.velocity_ned = {state(3), state(4), state(5)},
-		.position_variance = {covariance(0, 0), covariance(1, 1), covariance(2, 2)},
-		.velocity_variance = {covariance(3, 3), covariance(4, 4), covariance(5, 5)}
-	};
+	updateGnssKFSnapshot();
 
 	const auto bracket = _high_freq_imu_history.findBracket(sample.time_us);
 

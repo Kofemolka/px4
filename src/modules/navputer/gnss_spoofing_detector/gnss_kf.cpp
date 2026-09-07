@@ -157,6 +157,11 @@ const GnssKalmanFilter::Matrix6f& GnssKalmanFilter::covariance() const
 	return _P;
 }
 
+uint64_t GnssKalmanFilter::lastUpdateTimeUs() const
+{
+	return _time_us;
+}
+
 void GnssKalmanFilter::reset()
 {
 	_state.setZero();

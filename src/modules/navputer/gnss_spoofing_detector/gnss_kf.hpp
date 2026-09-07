@@ -67,6 +67,7 @@ public:
 
 	const Vector6f& state() const;
 	const Matrix6f& covariance() const;
+	uint64_t lastUpdateTimeUs() const;
 private:
 	bool isMeasurementValid(const Measurement& sample);
 	void initialize(const Measurement& sample);

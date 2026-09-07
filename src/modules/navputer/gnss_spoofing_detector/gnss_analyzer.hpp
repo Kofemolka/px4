@@ -214,6 +214,7 @@ private:
 	void maybeLogSuspicion();
 	void recalculateState(const uint64_t last_gnss_sample);
 	void resetInternalGnssKF();
+	void updateGnssKFSnapshot();
 private:
 	GnssSpoofingState _state{GnssSpoofingState::NoOrigin};
 	GnssKalmanFilter _gnss_kf;
