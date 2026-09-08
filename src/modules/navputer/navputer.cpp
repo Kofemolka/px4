@@ -69,9 +69,11 @@ Navputer::Navputer(const px4::wq_config_t &config, bool replay_mode):
 	_param_ekf2_req_hdrift(_params->ekf2_req_hdrift),
 	_param_ekf2_req_vdrift(_params->ekf2_req_vdrift),
 	_param_ekf2_req_fix(_params->ekf2_req_fix),
-	_param_ekf2_gsf_tas(_params->ekf2_gsf_tas)
+	_param_ekf2_gsf_tas(_params->ekf2_gsf_tas),
+	_param_npt_sd_aux_sources{}
 {
 	_gnss_spoofing_detector.setGnssInstance(_param_npt_gps_instance.get());
+	_gnss_spoofing_detector.setAllowedAuxSources(_param_npt_sd_aux_sources.get());
 	AdvertiseTopics();
 }
 
@@ -590,34 +592,6 @@ void Navputer::PublishAidSourceStatus(const hrt_abstime &timestamp)
 				_aid_src_ranging_beacon_pub);
 }
 
-void Navputer::PublishGpsPosition(const sensor_gps_s &gps, uint8_t instance)
-{
-	navput_gps_position_s msg{};
-
-	msg.timestamp = hrt_absolute_time();
-	msg.timestamp_sample = gps.timestamp_sample > 0
-		? gps.timestamp_sample
-		: gps.timestamp;
-
-	msg.gps_instance = instance;
-	msg.device_id = gps.device_id;
-	msg.fix_type = gps.fix_type;
-
-	msg.lat = gps.latitude_deg;
-	msg.lon = gps.longitude_deg;
-	msg.alt_msl = static_cast<float>(gps.altitude_msl_m);
-
-	msg.vel_n = gps.vel_n_m_s;
-	msg.vel_e = gps.vel_e_m_s;
-	msg.vel_d = gps.vel_d_m_s;
-
-	msg.eph = gps.eph;
-	msg.epv = gps.epv;
-	msg.s_variance = gps.s_variance_m_s;
-
-	_gps_position_pub.publish(msg);
-}
-
 void Navputer::UpdateBaroSample(ekf2_timestamps_s &ekf2_timestamps)
 {
 	// EKF baro sample
@@ -714,7 +688,7 @@ void Navputer::UpdateRangingBeaconSample(ekf2_timestamps_s &ekf2_timestamps)
 	}
 }
 
-void Navputer::UpdateGpsSample(ekf2_timestamps_s &ekf2_timestamps, const GnssSpoofingDetector::SpoofReport& report)
+void Navputer::UpdateGpsSample(ekf2_timestamps_s &ekf2_timestamps, const SpoofReport& report)
 {
 	const auto needed_gps_instance = _param_npt_gps_instance.get();
 
@@ -743,8 +717,6 @@ void Navputer::UpdateGpsSample(ekf2_timestamps_s &ekf2_timestamps, const GnssSpo
 		{
 			continue; //TODO: change and set to NAN
 		}
-
-		PublishGpsPosition(vehicle_gps_position, static_cast<uint8_t>(instance));
 
 		if (fabsf(_param_ekf2_gps_yaw_off.get()) > 0.f)
 		{

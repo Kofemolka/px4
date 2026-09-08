@@ -48,7 +48,7 @@
 #include <uORB/topics/navput_local_position.h>
 #include <uORB/topics/ranging_beacon.h>
 #include <uORB/topics/aux_global_position.h>
-#include <uORB/topics/navput_spoof_detector_gnss_kf.h>
+#include <uORB/topics/navput_gnss_spoof_detector.h>
 #include <drivers/drv_hrt.h>
 #include <lib/geo/geo.h>
 #include <ekf.h>
@@ -58,21 +58,15 @@
 class GnssSpoofingDetector
 {
 public:
-	struct SpoofReport
-	{
-		GnssSpoofingState state{GnssSpoofingState::NoOrigin};
-		float pos_stddev_mult{1.f};
-		float vel_stddev_mult{1.f};
-	};
-public:
 	void update(const DeltaVelocityEarth &imu_ned);
 	void setGnssInstance(const int gnss_instance);
+	void setAllowedAuxSources(const int32_t mask);
 	SpoofReport report() const;
 private:
 	void maybeUpdateOrigin();
 	void maybeFuseGnss();
-	void maybeGrabMlatPosition();
-	void publishGnssKfSnapshot();
+	void maybeGrabAuxPosition();
+	void maybePublishExtendedState();
 private:
 	GnssAnalyzer _analyzer;
 
@@ -82,13 +76,16 @@ private:
 	MapProjection _origin_projection{};
 	bool _origin_valid{false};
 
+	int32_t _allowed_aux_sources_mask{0};
+	uint64_t _last_diaglog_us{0};
+
 	// subscriptions
 	uORB::Subscription _gps_sub{ORB_ID(vehicle_gps_position)};
 	uORB::Subscription _local_position_sub{ORB_ID(navput_local_position)};
 	uORB::SubscriptionMultiArray<aux_global_position_s, 4> _aux_global_pos_subs{ORB_ID::aux_global_position};
 
 	// publication
-	uORB::Publication<navput_spoof_detector_gnss_kf_s> _gnss_kf_pub{ORB_ID(navput_spoof_detector_gnss_kf)};
+	uORB::Publication<navput_gnss_spoof_detector_s> _state_pub{ORB_ID(navput_gnss_spoof_detector)};
 };
 
 #endif

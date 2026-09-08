@@ -45,7 +45,27 @@
 namespace
 {
 constexpr double kOriginEpsilon = 1e-8;
-constexpr float kMaxStddevMultiplier = 10.f;
+constexpr uint64_t kDiagnosticLogPeriodUs = 500'000;
+
+bool isAuxSourceValid(const aux_global_position_s& aux_global_pos, const int32_t allowed_mask, uint64_t& time_us)
+{
+	const int32_t bit = aux_global_pos.source == aux_global_position_s::SOURCE_UNKNOWN ? 7 : aux_global_pos.source - 1;
+
+	if ((allowed_mask & (1 << bit)) == 0)
+	{
+		return false;
+	}
+	if (!PX4_ISFINITE(aux_global_pos.lat)
+		|| !PX4_ISFINITE(aux_global_pos.lon)
+		|| !PX4_ISFINITE(aux_global_pos.eph)
+		|| aux_global_pos.eph < 0.f)
+	{
+		return false;
+	}
+
+	time_us = aux_global_pos.timestamp_sample > 0 ? aux_global_pos.timestamp_sample : aux_global_pos.timestamp;
+	return time_us != 0;
+}
 } // namespace
 
 void GnssSpoofingDetector::setGnssInstance(const int instance)
@@ -57,6 +77,11 @@ void GnssSpoofingDetector::setGnssInstance(const int instance)
 
 	_gps_sub = uORB::Subscription{ORB_ID(vehicle_gps_position), static_cast<uint8_t>(instance)};
 	_analyzer.reset(_origin_valid);
+}
+
+void GnssSpoofingDetector::setAllowedAuxSources(const int32_t mask)
+{
+	_allowed_aux_sources_mask = mask;
 }
 
 void GnssSpoofingDetector::maybeUpdateOrigin()
@@ -122,12 +147,10 @@ void GnssSpoofingDetector::maybeFuseGnss()
 				    gps.s_variance_m_s * gps.s_variance_m_s,
 				    gps.s_variance_m_s * gps.s_variance_m_s}
 		});
-
-		publishGnssKfSnapshot();
 	}
 }
 
-void GnssSpoofingDetector::maybeGrabMlatPosition()
+void GnssSpoofingDetector::maybeGrabAuxPosition()
 {
 	if (!_origin_valid)
 	{
@@ -142,21 +165,10 @@ void GnssSpoofingDetector::maybeGrabMlatPosition()
 		{
 			continue;
 		}
-		if (aux_global_pos.source != aux_global_position_s::SOURCE_PSEUDOLITES)
-		{
-			continue;
-		}
-		if (!PX4_ISFINITE(aux_global_pos.lat)
-			|| !PX4_ISFINITE(aux_global_pos.lon)
-			|| !PX4_ISFINITE(aux_global_pos.eph)
-			|| aux_global_pos.eph < 0.f)
-		{
-			continue;
-		}
 
-		const uint64_t time_us = aux_global_pos.timestamp_sample > 0 ? aux_global_pos.timestamp_sample : aux_global_pos.timestamp;
+		uint64_t time_us{0};
 
-		if (time_us == 0)
+		if (!isAuxSourceValid(aux_global_pos, _allowed_aux_sources_mask, time_us))
 		{
 			continue;
 		}
@@ -165,7 +177,7 @@ void GnssSpoofingDetector::maybeGrabMlatPosition()
 		// splitting total variance between N and E
 		const float position_variance_per_axis = aux_global_pos.eph * aux_global_pos.eph * 0.5f;
 
-		_analyzer.pushMlatPosition(GnssAnalyzerTypes::MlatPositionSample{
+		_analyzer.pushAuxPosition(GnssAnalyzerTypes::AuxPositionSample{
 			.time_us = time_us,
 			.position_ne = position_ne,
 			.position_variance_ne = {
@@ -176,23 +188,36 @@ void GnssSpoofingDetector::maybeGrabMlatPosition()
 	}
 }
 
-void GnssSpoofingDetector::publishGnssKfSnapshot()
+void GnssSpoofingDetector::maybePublishExtendedState()
 {
-	const auto& snapshot = _analyzer.gnssKFSnapshot();
+	if (hrt_elapsed_time(&_last_diaglog_us) < kDiagnosticLogPeriodUs)
+	{
+		return;
+	}
 
-	navput_spoof_detector_gnss_kf_s msg{};
+	const auto es = _analyzer.extendedState();
+
+	navput_gnss_spoof_detector_s msg{};
 	msg.timestamp = hrt_absolute_time();
-	msg.timestamp_sample = snapshot.time_us;
+	msg.timestamp_sample = es.gnss_kf_snapshot.time_us;
+	msg.state = static_cast<uint8_t>(es.state);
+	msg.imu_velocity_suspicion = static_cast<float>(es.imu_velocity_suspicion);
+	msg.gnss_velocity_consistency_suspicion = static_cast<float>(es.gnss_velocity_consistency_suspicion);
+	msg.aux_position_suspicion = static_cast<float>(es.position_suspicion);
+	msg.needs_aux_recovery = es.needs_aux_recovery;
+	msg.gnss_kf_valid = es.gnss_kf_snapshot.valid;
 
 	msg.ref_lat = _origin_lat_deg;
 	msg.ref_lon = _origin_lon_deg;
 
-	snapshot.position_ned.copyTo(msg.position_ned);
-	snapshot.velocity_ned.copyTo(msg.velocity_ned);
-	snapshot.position_variance.copyTo(msg.position_variance);
-	snapshot.velocity_variance.copyTo(msg.velocity_variance);
+	es.gnss_kf_snapshot.position_ned.copyTo(msg.position_ned);
+	es.gnss_kf_snapshot.velocity_ned.copyTo(msg.velocity_ned);
+	es.gnss_kf_snapshot.position_variance.copyTo(msg.position_variance);
+	es.gnss_kf_snapshot.velocity_variance.copyTo(msg.velocity_variance);
 
-	_gnss_kf_pub.publish(msg);
+	_state_pub.publish(msg);
+
+	_last_diaglog_us = hrt_absolute_time();
 }
 
 void GnssSpoofingDetector::update(const DeltaVelocityEarth &imu_ned)
@@ -200,21 +225,14 @@ void GnssSpoofingDetector::update(const DeltaVelocityEarth &imu_ned)
 	maybeUpdateOrigin();
 
 	_analyzer.pushImu(imu_ned);
-	maybeGrabMlatPosition();
+	maybeGrabAuxPosition();
 	maybeFuseGnss();
+
+	maybePublishExtendedState();
 }
 
-GnssSpoofingDetector::SpoofReport GnssSpoofingDetector::report() const
+SpoofReport GnssSpoofingDetector::report() const
 {
-	const float suspicion = _analyzer.suspicion();
-	const float normalized = math::constrain(suspicion / GnssAnalyzerTypes::kSpoofThreshold, 0.f, 1.f);
-	// normalized^2 gives gentler earlier response comparing to linear
-	const float stddev_multiplier = 1.f + (kMaxStddevMultiplier - 1.f) * normalized * normalized;
-
-	return SpoofReport {
-		.state = _analyzer.state(),
-		.pos_stddev_mult = stddev_multiplier,
-		.vel_stddev_mult = stddev_multiplier
-	};
+	return _analyzer.report();
 }
 

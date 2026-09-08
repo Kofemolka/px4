@@ -100,13 +100,6 @@ publications:
       rel: best_effort
       express: true
 
-  - topic: /fmu/out/vehicle_gps_position
-    type: px4_msgs::msg::SensorGps
-    options:
-      cc: drop
-      rel: best_effort
-      express: true
-
   - topic: /fmu/out/vehicle_local_position
     type: px4_msgs::msg::VehicleLocalPosition
     # options:
@@ -161,11 +154,16 @@ publications:
   - topic: /fmu/out/navput_aid_src_aux_global_position
     type: px4_msgs::msg::NavputAidSource2d
 
-  - topic: /fmu/out/navput_gps_position
-    type: px4_msgs::msg::NavputGpsPosition
+  - topic: /fmu/out/vehicle_gps_position
+    type: px4_msgs::msg::SensorGps
+    instance: 0
 
-  - topic: /fmu/out/navput_spoof_detector_gnss_kf
-    type: px4_msgs::msg::NavputSpoofDetectorGnssKf
+  - topic: /fmu/out/vehicle_gps_position
+    type: px4_msgs::msg::SensorGps
+    instance: 1
+
+  - topic: /fmu/out/navput_gnss_spoof_detector
+    type: px4_msgs::msg::NavputGnssSpoofDetector
 
   - topic: /fmu/out/estimator_aid_src_aux_global_position
     type: px4_msgs::msg::EstimatorAidSource2d

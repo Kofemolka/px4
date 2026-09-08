@@ -96,7 +96,6 @@
 #include <uORB/topics/navput_status_flags.h>
 #include <uORB/topics/navput_fusion_control.h>
 #include <uORB/topics/navput_aid_source1d.h>
-#include <uORB/topics/navput_gps_position.h>
 
 #include "motion_detector.hpp"
 #include "copilot_lifecycle.hpp"
@@ -158,7 +157,6 @@ private:
 	void PublishStatusFlags(const hrt_abstime &timestamp);
 	void PublishFusionControl(const hrt_abstime &timestamp);
 	void PublishAidSourceStatus(const hrt_abstime &timestamp);
-	void PublishGpsPosition(const sensor_gps_s &gps, uint8_t instance);
 
 	// publish helper for estimator_aid_source topics
 	template <typename T>
@@ -180,7 +178,7 @@ private:
 	void UpdateMagSample(ekf2_timestamps_s &ekf2_timestamps);
 	void UpdateBaroSample(ekf2_timestamps_s &ekf2_timestamps);
 	void UpdateRangingBeaconSample(ekf2_timestamps_s &ekf2_timestamps);
-	void UpdateGpsSample(ekf2_timestamps_s &ekf2_timestamps, const GnssSpoofingDetector::SpoofReport& report);
+	void UpdateGpsSample(ekf2_timestamps_s &ekf2_timestamps, const SpoofReport& report);
 
 	void UpdateCalibration(const hrt_abstime &timestamp, InFlightCalibration &cal, const matrix::Vector3f &bias,
 			       const matrix::Vector3f &bias_variance, float bias_limit, bool bias_valid, bool learning_valid);
@@ -224,7 +222,6 @@ private:
 
 	uORB::Publication<navput_attitude_s>           		_attitude_pub{ORB_ID(navput_attitude)};
 	uORB::Publication<navput_local_position_s>     		_local_position_pub{ORB_ID(navput_local_position)};
-	uORB::Publication<navput_gps_position_s>     		_gps_position_pub{ORB_ID(navput_gps_position)};
 
 	hrt_abstime _status_baro_hgt_pub_last{0};
 	uORB::Publication<navput_aid_source1d_s> _aid_src_baro_hgt_pub {ORB_ID(navput_aid_src_baro_hgt)};
@@ -282,7 +279,8 @@ private:
 		(ParamExtInt<px4::params::EKF2_REQ_FIX>)       _param_ekf2_req_fix,
 		(ParamFloat<px4::params::EKF2_REQ_GPS_H>)      _param_ekf2_req_gps_h,
 		(ParamExtFloat<px4::params::EKF2_GSF_TAS>)     _param_ekf2_gsf_tas,
-		(ParamFloat<px4::params::EKF2_GPS_YAW_OFF>)    _param_ekf2_gps_yaw_off
+		(ParamFloat<px4::params::EKF2_GPS_YAW_OFF>)    _param_ekf2_gps_yaw_off,
+		(ParamInt<px4::params::NPT_SD_AUX_SRC>)        _param_npt_sd_aux_sources
 	)
 };
 #endif // !NAVPUTER_HPP

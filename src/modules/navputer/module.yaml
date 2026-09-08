@@ -136,3 +136,22 @@ parameters:
       min: 0
       max: 10000
       unit: ms
+
+    NPT_SD_AUX_SRC:
+      description:
+        short: Enabled trusted AUX sources
+        long: GnssSpoofingDetector will use these AUX sources in its specialized detectors.
+          The list of available sources is in the struct aux_global_position_s.
+      type: bitmask
+      bit:
+        0: GNSS
+        1: Vision
+        2: Pseudolites
+        3: Terrain
+        4: Magnetic
+        5: Estimator
+        6: Leo
+        7: Unknown
+      default: 4
+      min: 0
+      max: 255

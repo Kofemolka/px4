@@ -46,7 +46,7 @@
 #include "history_ring_buffer.hpp"
 #include "gnss_kf.hpp"
 
-// NoOrigin <-> Spoofed <-> Healthy
+// NoOrigin <-> Untrusted <-> Trusted
 enum class GnssSpoofingState
 {
 	NoOrigin,
@@ -54,24 +54,15 @@ enum class GnssSpoofingState
 	Untrusted
 };
 
+struct SpoofReport
+{
+	GnssSpoofingState state{GnssSpoofingState::NoOrigin};
+	float pos_stddev_mult{1.f};
+	float vel_stddev_mult{1.f};
+};
+
 namespace GnssAnalyzerTypes
 {
-constexpr float kSpoofThreshold = 0.8f;
-constexpr float kUnspoofThreshold = 0.2f;
-
-constexpr uint64_t kGpsFreqHz = 8;
-constexpr uint64_t kImuFreqHz = 300;
-constexpr uint64_t kTwiceGpsPeriodUs = 2'000'000ULL / kGpsFreqHz;
-constexpr uint64_t kImuPeriodUs = 1'000'000ULL / kImuFreqHz;
-
-constexpr uint64_t kVelWindowDurationUs = 2'000'000; // 2 second window
-
-// Twice larger than the sufficient imu history capacity that should encompass two GPS periods ~250 ms
-constexpr size_t kHighFreqImuQueueSize = (kTwiceGpsPeriodUs / kImuPeriodUs) * 2ULL;
-// Twice larger than the sufficient gnss history
-constexpr size_t kGnssQueueSize = (kVelWindowDurationUs / 1'000'000ULL) * kGpsFreqHz * 2ULL;
-constexpr size_t kMlatPosQueueSize = 2;
-
 // internal
 struct GnssEndpoint
 {
@@ -95,7 +86,7 @@ struct ImuCumulativeVelocityEndpoint
 	matrix::Vector3f cumulative_velocity{};
 	matrix::Vector3f cumulative_velocity_variance{};
 };
-struct MlatPositionSample
+struct AuxPositionSample
 {
 	uint64_t time_us;
 	matrix::Vector2f position_ne;
@@ -112,18 +103,10 @@ struct GnssKFSnapshot
 	matrix::Vector3f velocity_variance{};
 };
 
-using CummulativeImuHistory = HistoryRingBuffer<
-	ImuCumulativeVelocityEndpoint,
-	GnssAnalyzerTypes::kHighFreqImuQueueSize>;
-using GnssEndpointHistory = HistoryRingBuffer<
-	GnssEndpoint,
-	GnssAnalyzerTypes::kGnssQueueSize>;
-using GnssRawHistory = HistoryRingBuffer<
-	GnssRaw,
-	GnssAnalyzerTypes::kGnssQueueSize>;
-using MlatPositionHistory = HistoryRingBuffer<
-	MlatPositionSample,
-	GnssAnalyzerTypes::kMlatPosQueueSize>;
+using CummulativeImuHistory = HistoryRingBuffer<ImuCumulativeVelocityEndpoint, 150>;
+using GnssEndpointHistory = HistoryRingBuffer<GnssEndpoint, 32>;
+using GnssRawHistory = HistoryRingBuffer<GnssRaw, 32>;
+using AuxPositionHistory = HistoryRingBuffer<AuxPositionSample, 2>;
 
 class BasicAnomalyAnalyzer
 {
@@ -152,20 +135,20 @@ public:
 	void analyze(const GnssAnalyzerTypes::GnssRawHistory &history);
 };
 
-class GnssMlatPosAnalyzer final : public BasicAnomalyAnalyzer
+class GnssAuxPosAnalyzer final : public BasicAnomalyAnalyzer
 {
 public:
 	void reset(float initial_suspicion);
 	void analyze(const GnssAnalyzerTypes::GnssEndpointHistory &gnss_history,
-		     const GnssAnalyzerTypes::MlatPositionHistory &mlat_history);
+		     const GnssAnalyzerTypes::AuxPositionHistory &aux_history);
 	uint64_t lastSuccessfulAnalysisTime() const;
 
 private:
 	void updateSuspicion(float normalized_error);
 
 	bool grabSamples(const GnssAnalyzerTypes::GnssEndpointHistory &gnss_history,
-			 const GnssAnalyzerTypes::MlatPositionHistory &mlat_history,
-			 GnssAnalyzerTypes::MlatPositionSample &mlat,
+			 const GnssAnalyzerTypes::AuxPositionHistory &aux_history,
+			 GnssAnalyzerTypes::AuxPositionSample &aux,
 			 GnssAnalyzerTypes::GnssEndpoint &before,
 			 GnssAnalyzerTypes::GnssEndpoint &after);
 private:
@@ -174,27 +157,36 @@ private:
 
 struct IndependentRecoveryLatch
 {
-	bool canBeTrusted(const uint64_t last_successful_mlat_analysis_us) const
+	bool canBeTrusted(const uint64_t last_successful_aux_analysis_us) const
 	{
-		return !_recovery_needs_mlat_confirmation
-			|| last_successful_mlat_analysis_us > _recovery_required_after_us;
+		return !_recovery_needs_aux_confirmation
+			|| last_successful_aux_analysis_us > _recovery_required_after_us;
 	}
 
 	void setNeedForRecoveryAfter(const uint64_t gnss_time_us)
 	{
-		_recovery_needs_mlat_confirmation = true;
+		_recovery_needs_aux_confirmation = true;
 		_recovery_required_after_us = gnss_time_us;
 	}
 
 	void clear()
 	{
-		_recovery_needs_mlat_confirmation = false;
+		_recovery_needs_aux_confirmation = false;
 	}
 
-	bool _recovery_needs_mlat_confirmation{false};
+	bool _recovery_needs_aux_confirmation{false};
 	uint64_t _recovery_required_after_us{0};
 };
 
+struct GnssAnalyzerExtendedState
+{
+	GnssSpoofingState state;
+	double imu_velocity_suspicion;
+	double gnss_velocity_consistency_suspicion;
+	double position_suspicion;
+	bool needs_aux_recovery;
+	GnssAnalyzerTypes::GnssKFSnapshot gnss_kf_snapshot;
+};
 } // namespace GnssAnalyzerTypes
 
 class GnssAnalyzer
@@ -202,16 +194,16 @@ class GnssAnalyzer
 public:
 	GnssSpoofingState state() const;
 	float suspicion() const;
-	const GnssAnalyzerTypes::GnssKFSnapshot &gnssKFSnapshot() const;
+	SpoofReport report() const;
+	GnssAnalyzerTypes::GnssAnalyzerExtendedState extendedState() const;
 
 	void reset(bool origin_valid);
 
 	void pushImu(const DeltaVelocityEarth &sample);
 	void pushGnss(const GnssKalmanFilter::Measurement &sample);
-	void pushMlatPosition(const GnssAnalyzerTypes::MlatPositionSample &sample);
+	void pushAuxPosition(const GnssAnalyzerTypes::AuxPositionSample &sample);
 private:
 	void transitionTo(GnssSpoofingState new_state);
-	void maybeLogSuspicion();
 	void recalculateState(const uint64_t last_gnss_sample);
 	void resetInternalGnssKF();
 	void updateGnssKFSnapshot();
@@ -223,7 +215,7 @@ private:
 	GnssAnalyzerTypes::CummulativeImuHistory _high_freq_imu_history;
 	GnssAnalyzerTypes::GnssEndpointHistory _gnss_endpoint_history;
 	GnssAnalyzerTypes::GnssRawHistory _gnss_raw_history;
-	GnssAnalyzerTypes::MlatPositionHistory _mlat_position_history;
+	GnssAnalyzerTypes::AuxPositionHistory _aux_position_history;
 
 	GnssAnalyzerTypes::IndependentRecoveryLatch _recovery_latch;
 
@@ -232,9 +224,7 @@ private:
 
 	GnssAnalyzerTypes::GnssImuDeltaVelocityAnalyzer _imu_velocity_analyzer;
 	GnssAnalyzerTypes::GnssVelocityConsistencyAnalyzer _gnss_velocity_consistency_analyzer;
-	GnssAnalyzerTypes::GnssMlatPosAnalyzer _position_analyzer;
-
-	uint64_t _last_diaglog_us{0};
+	GnssAnalyzerTypes::GnssAuxPosAnalyzer _position_analyzer;
 };
 
 #endif

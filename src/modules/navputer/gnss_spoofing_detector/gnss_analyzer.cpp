@@ -39,6 +39,12 @@
 
 namespace
 {
+constexpr float kSpoofThreshold = 0.8f;
+constexpr float kUnspoofThreshold = 0.2f;
+
+constexpr float kMaxStddevMultiplier = 10.f;
+
+constexpr uint64_t kVelWindowDurationUs = 2'000'000;
 constexpr uint64_t kOldestPossibleSampleToCompareUs = 2'500'000;
 
 constexpr float kVelSafeSigma = 1.0f;
@@ -53,7 +59,6 @@ constexpr float kPosSevereSigma = 5.f;
 constexpr float kSafePositionSuspicionDecrease = 0.1f;
 constexpr float kMaxPositionSuspicionIncrease = 0.4f;
 constexpr uint64_t kPosMaxGnssInterpolationGapUs = 250'000;
-constexpr uint64_t kDiagnosticLogPeriodUs = 5'000'000;
 
 template<typename T, size_t Size>
 matrix::Vector<T, Size> lerp(const matrix::Vector<T, Size> &before,
@@ -150,8 +155,7 @@ void GnssImuDeltaVelocityAnalyzer::analyze(const GnssEndpointHistory &history)
 	GnssEndpoint recent;
 	GnssEndpoint old;
 
-	if (!grabSamplesForWindow(history, recent, old, kVelWindowDurationUs,
-			kOldestPossibleSampleToCompareUs))
+	if (!grabSamplesForWindow(history, recent, old, kVelWindowDurationUs, kOldestPossibleSampleToCompareUs))
 	{
 		return;
 	}
@@ -246,14 +250,14 @@ void GnssVelocityConsistencyAnalyzer::analyze(const GnssRawHistory &history)
 	_last_analysis_time_us = recent.time_us;
 }
 
-void GnssMlatPosAnalyzer::reset(float initial_suspicion)
+void GnssAuxPosAnalyzer::reset(float initial_suspicion)
 {
 	BasicAnomalyAnalyzer::reset(initial_suspicion);
 	_last_analysis_time_us = 0;
 	_last_successful_analysis_time_us = 0;
 }
 
-void GnssMlatPosAnalyzer::updateSuspicion(float normalized_error)
+void GnssAuxPosAnalyzer::updateSuspicion(float normalized_error)
 {
 	float suspicion_delta = 0.f;
 
@@ -271,33 +275,33 @@ void GnssMlatPosAnalyzer::updateSuspicion(float normalized_error)
 	_suspicion = math::constrain(_suspicion + suspicion_delta, 0.f, 1.f);
 }
 
-bool GnssMlatPosAnalyzer::grabSamples(
+bool GnssAuxPosAnalyzer::grabSamples(
 	const GnssEndpointHistory &gnss_history,
-	const MlatPositionHistory &mlat_history,
-	MlatPositionSample &mlat,
+	const AuxPositionHistory &aux_history,
+	AuxPositionSample &aux,
 	GnssEndpoint &before,
 	GnssEndpoint &after)
 {
-	if (mlat_history.empty() || gnss_history.empty())
+	if (aux_history.empty() || gnss_history.empty())
 	{
 		return false;
 	}
 
-	mlat = mlat_history.newest();
+	aux = aux_history.newest();
 
-	if (mlat.time_us <= _last_analysis_time_us
-		|| mlat.time_us > gnss_history.newest().time_us)
+	if (aux.time_us <= _last_analysis_time_us
+		|| aux.time_us > gnss_history.newest().time_us)
 	{
 		return false;
 	}
 
-	if (mlat.time_us < gnss_history.oldest().time_us)
+	if (aux.time_us < gnss_history.oldest().time_us)
 	{
-		_last_analysis_time_us = mlat.time_us;
+		_last_analysis_time_us = aux.time_us;
 		return false;
 	}
 
-	const auto bracket = gnss_history.findBracket(mlat.time_us);
+	const auto bracket = gnss_history.findBracket(aux.time_us);
 
 	if (!bracket)
 	{
@@ -309,21 +313,21 @@ bool GnssMlatPosAnalyzer::grabSamples(
 
 	if ((after.time_us - before.time_us) > kPosMaxGnssInterpolationGapUs)
 	{
-		_last_analysis_time_us = mlat.time_us;
+		_last_analysis_time_us = aux.time_us;
 		return false;
 	}
 
 	return true;
 }
 
-void GnssMlatPosAnalyzer::analyze(const GnssEndpointHistory &gnss_history,
-	const MlatPositionHistory &mlat_history)
+void GnssAuxPosAnalyzer::analyze(const GnssEndpointHistory &gnss_history,
+	const AuxPositionHistory &aux_history)
 {
-	MlatPositionSample mlat;
+	AuxPositionSample aux;
 	GnssEndpoint before;
 	GnssEndpoint after;
 
-	if (!grabSamples(gnss_history, mlat_history, mlat, before, after))
+	if (!grabSamples(gnss_history, aux_history, aux, before, after))
 	{
 		return;
 	}
@@ -334,28 +338,28 @@ void GnssMlatPosAnalyzer::analyze(const GnssEndpointHistory &gnss_history,
 		after.gnss_position_ned,
 		before.time_us,
 		after.time_us,
-		mlat.time_us);
+		aux.time_us);
 	const matrix::Vector2f gnss_position_ne{gnss_position_ned(0), gnss_position_ned(1)};
-	const matrix::Vector2f position_residual = gnss_position_ne - mlat.position_ne;
+	const matrix::Vector2f position_residual = gnss_position_ne - aux.position_ne;
 	// finding pos variance residual
 	const matrix::Vector3f gnss_position_variance = lerp(
 		before.gnss_position_ned_variance,
 		after.gnss_position_ned_variance,
 		before.time_us,
 		after.time_us,
-		mlat.time_us);
-	const float variance_n = gnss_position_variance(0) + mlat.position_variance_ne(0);
-	const float variance_e = gnss_position_variance(1) + mlat.position_variance_ne(1);
+		aux.time_us);
+	const float variance_n = gnss_position_variance(0) + aux.position_variance_ne(0);
+	const float variance_e = gnss_position_variance(1) + aux.position_variance_ne(1);
 	// all together error
 	const float normalized_error = sqrtf(position_residual(0) * position_residual(0) / variance_n
 		+ position_residual(1) * position_residual(1) / variance_e);
 
 	updateSuspicion(normalized_error);
-	_last_analysis_time_us = mlat.time_us;
-	_last_successful_analysis_time_us = mlat.time_us;
+	_last_analysis_time_us = aux.time_us;
+	_last_successful_analysis_time_us = aux.time_us;
 }
 
-uint64_t GnssMlatPosAnalyzer::lastSuccessfulAnalysisTime() const
+uint64_t GnssAuxPosAnalyzer::lastSuccessfulAnalysisTime() const
 {
 	return _last_successful_analysis_time_us;
 }
@@ -373,9 +377,16 @@ float GnssAnalyzer::suspicion() const
 		_position_analyzer.suspicion());
 }
 
-const GnssAnalyzerTypes::GnssKFSnapshot &GnssAnalyzer::gnssKFSnapshot() const
+GnssAnalyzerExtendedState GnssAnalyzer::extendedState() const
 {
-	return _gnss_kf_snapshot;
+	return GnssAnalyzerExtendedState{
+		.state = state(),
+		.imu_velocity_suspicion = _imu_velocity_analyzer.suspicion(),
+		.gnss_velocity_consistency_suspicion = _gnss_velocity_consistency_analyzer.suspicion(),
+		.position_suspicion = _position_analyzer.suspicion(),
+		.needs_aux_recovery = _recovery_latch._recovery_needs_aux_confirmation,
+		.gnss_kf_snapshot = _gnss_kf_snapshot
+	};
 }
 
 void GnssAnalyzer::transitionTo(GnssSpoofingState new_state)
@@ -387,7 +398,7 @@ void GnssAnalyzer::transitionTo(GnssSpoofingState new_state)
 			static_cast<double>(_imu_velocity_analyzer.suspicion()),
 			static_cast<double>(_gnss_velocity_consistency_analyzer.suspicion()),
 			static_cast<double>(_position_analyzer.suspicion()),
-			static_cast<int>(_recovery_latch._recovery_needs_mlat_confirmation));
+			static_cast<int>(_recovery_latch._recovery_needs_aux_confirmation));
 		_state = new_state;
 
 		if (new_state == GnssSpoofingState::Trusted)
@@ -397,22 +408,6 @@ void GnssAnalyzer::transitionTo(GnssSpoofingState new_state)
 	}
 }
 
-void GnssAnalyzer::maybeLogSuspicion()
-{
-	if (hrt_elapsed_time(&_last_diaglog_us) < kDiagnosticLogPeriodUs)
-	{
-		return;
-	}
-
-	_last_diaglog_us = hrt_absolute_time();
-	PX4_INFO("GNSSAnalyzer: state=%u (vel_sus1=%.2f vel_sus2=%.2f pos_sus=%.2f latch=%d)",
-		static_cast<int>(_state),
-		static_cast<double>(_imu_velocity_analyzer.suspicion()),
-		static_cast<double>(_gnss_velocity_consistency_analyzer.suspicion()),
-		static_cast<double>(_position_analyzer.suspicion()),
-		static_cast<int>(_recovery_latch._recovery_needs_mlat_confirmation));
-}
-
 void GnssAnalyzer::reset(bool origin_valid)
 {
 	_gnss_kf.reset();
@@ -420,7 +415,7 @@ void GnssAnalyzer::reset(bool origin_valid)
 	_high_freq_imu_history.reset();
 	_gnss_endpoint_history.reset();
 	_gnss_raw_history.reset();
-	_mlat_position_history.reset();
+	_aux_position_history.reset();
 	_imu_cumulative_velocity_ned.setZero();
 	_imu_cumulative_velocity_variance.setZero();
 	_recovery_latch = {};
@@ -448,16 +443,15 @@ void GnssAnalyzer::pushImu(const DeltaVelocityEarth &sample)
 		.cumulative_velocity_variance = _imu_cumulative_velocity_variance});
 }
 
-void GnssAnalyzer::pushMlatPosition(const MlatPositionSample &sample)
+void GnssAnalyzer::pushAuxPosition(const AuxPositionSample &sample)
 {
-	_mlat_position_history.push(sample);
+	_aux_position_history.push(sample);
 
 	if (_state != GnssSpoofingState::NoOrigin)
 	{
-		_position_analyzer.analyze(_gnss_endpoint_history, _mlat_position_history);
+		_position_analyzer.analyze(_gnss_endpoint_history, _aux_position_history);
 		const uint64_t last_gnss_sample_time_us = _gnss_endpoint_history.empty() ? 0 : _gnss_endpoint_history.newest().time_us;
 		recalculateState(last_gnss_sample_time_us);
-		maybeLogSuspicion();
 	}
 }
 
@@ -530,10 +524,22 @@ void GnssAnalyzer::pushGnss(const GnssKalmanFilter::Measurement &sample)
 	{
 		_imu_velocity_analyzer.analyze(_gnss_endpoint_history);
 		_gnss_velocity_consistency_analyzer.analyze(_gnss_raw_history);
-		_position_analyzer.analyze(_gnss_endpoint_history, _mlat_position_history);
+		_position_analyzer.analyze(_gnss_endpoint_history, _aux_position_history);
 		recalculateState(sample.time_us);
-		maybeLogSuspicion();
 	}
+}
+
+SpoofReport GnssAnalyzer::report() const
+{
+	const float normalized = math::constrain(suspicion() / kSpoofThreshold, 0.f, 1.f);
+	// normalized^2 gives gentler earlier response comparing to linear
+	const float stddev_multiplier = 1.f + (kMaxStddevMultiplier - 1.f) * normalized * normalized;
+
+	return SpoofReport {
+		.state = state(),
+		.pos_stddev_mult = stddev_multiplier,
+		.vel_stddev_mult = stddev_multiplier
+	};
 }
 
 void GnssAnalyzer::recalculateState(const uint64_t last_gnss_sample)
