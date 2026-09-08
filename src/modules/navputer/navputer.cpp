@@ -70,7 +70,7 @@ Navputer::Navputer(const px4::wq_config_t &config, bool replay_mode):
 	_param_ekf2_req_vdrift(_params->ekf2_req_vdrift),
 	_param_ekf2_req_fix(_params->ekf2_req_fix),
 	_param_ekf2_gsf_tas(_params->ekf2_gsf_tas),
-	_param_npt_sd_aux_sources{}
+	_param_npt_sd_aux_instance_mask{}
 {
 	UpdateGnssParameters();
 	AdvertiseTopics();
@@ -155,12 +155,12 @@ void Navputer::UpdateGnssParameters()
 		_applied_gps_instance = gps_instance;
 	}
 
-	const int32_t aux_sources = _param_npt_sd_aux_sources.get();
+	const int32_t aux_instance_mask = _param_npt_sd_aux_instance_mask.get();
 
-	if (aux_sources != _applied_spoofing_detector_aux_sources)
+	if (aux_instance_mask != _applied_spoofing_detector_aux_instance_mask)
 	{
-		_gnss_spoofing_detector.setAllowedAuxSources(aux_sources);
-		_applied_spoofing_detector_aux_sources = aux_sources;
+		_gnss_spoofing_detector.setAllowedAuxInstanceMask(static_cast<uint8_t>(aux_instance_mask));
+		_applied_spoofing_detector_aux_instance_mask = aux_instance_mask;
 	}
 }
 

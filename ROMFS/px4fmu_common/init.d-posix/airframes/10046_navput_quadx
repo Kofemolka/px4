@@ -66,7 +66,7 @@ param set-default NPT_RNGBC_CTRL 1
 param set-default NPT_RNGBC_NOISE 75
 param set-default NPT_GPS_INSTANCE 1
 param set-default NPT_GPS_CTRL 7
-param set-default NPT_SD_AUX_SRC 4 # Pseudolites (Beacon MLAT) only
+param set-default NPT_SD_AUX_INST 1 # aux_global_position instance #0 (Beacon MLAT)
 
 # Enable fusion of all NAVPUT sensors
 param set-default NPT_FUSE_BARO 1

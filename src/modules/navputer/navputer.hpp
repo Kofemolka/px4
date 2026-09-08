@@ -243,7 +243,7 @@ private:
 	bool _system_flags_initialized{false};
 
 	int32_t _applied_gps_instance{-1};
-	int32_t _applied_spoofing_detector_aux_sources{-1};
+	int32_t _applied_spoofing_detector_aux_instance_mask{-1};
 
 	Ekf _ekf;
 
@@ -284,7 +284,7 @@ private:
 		(ParamFloat<px4::params::EKF2_REQ_GPS_H>)      _param_ekf2_req_gps_h,
 		(ParamExtFloat<px4::params::EKF2_GSF_TAS>)     _param_ekf2_gsf_tas,
 		(ParamFloat<px4::params::EKF2_GPS_YAW_OFF>)    _param_ekf2_gps_yaw_off,
-		(ParamInt<px4::params::NPT_SD_AUX_SRC>)        _param_npt_sd_aux_sources
+		(ParamInt<px4::params::NPT_SD_AUX_INST>)       _param_npt_sd_aux_instance_mask
 	)
 };
 #endif // !NAVPUTER_HPP

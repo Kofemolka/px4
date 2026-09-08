@@ -60,7 +60,7 @@ class GnssSpoofingDetector
 public:
 	void update(const DeltaVelocityEarth &imu_ned);
 	void setGnssInstance(const int gnss_instance);
-	void setAllowedAuxSources(const int32_t mask);
+	void setAllowedAuxInstanceMask(const uint8_t mask);
 	SpoofReport report() const;
 private:
 	void maybeUpdateOrigin();
@@ -76,7 +76,7 @@ private:
 	MapProjection _origin_projection{};
 	bool _origin_valid{false};
 
-	int32_t _allowed_aux_sources_mask{0};
+	uint8_t _allowed_aux_instance_mask{0};
 	uint64_t _last_diaglog_us{0};
 
 	// subscriptions

@@ -47,14 +47,8 @@ namespace
 constexpr double kOriginEpsilon = 1e-8;
 constexpr uint64_t kDiagnosticLogPeriodUs = 500'000;
 
-bool isAuxSourceValid(const aux_global_position_s& aux_global_pos, const int32_t allowed_mask, uint64_t& time_us)
+bool isAuxPositionValid(const aux_global_position_s& aux_global_pos, uint64_t& time_us)
 {
-	const int32_t bit = aux_global_pos.source == aux_global_position_s::SOURCE_UNKNOWN ? 7 : aux_global_pos.source - 1;
-
-	if ((allowed_mask & (1 << bit)) == 0)
-	{
-		return false;
-	}
 	if (!PX4_ISFINITE(aux_global_pos.lat)
 		|| !PX4_ISFINITE(aux_global_pos.lon)
 		|| !PX4_ISFINITE(aux_global_pos.eph)
@@ -79,9 +73,9 @@ void GnssSpoofingDetector::setGnssInstance(const int instance)
 	_analyzer.reset(_origin_valid);
 }
 
-void GnssSpoofingDetector::setAllowedAuxSources(const int32_t mask)
+void GnssSpoofingDetector::setAllowedAuxInstanceMask(const uint8_t mask)
 {
-	_allowed_aux_sources_mask = mask;
+	_allowed_aux_instance_mask = mask;
 }
 
 void GnssSpoofingDetector::maybeUpdateOrigin()
@@ -159,6 +153,13 @@ void GnssSpoofingDetector::maybeGrabAuxPosition()
 
 	for (size_t instance = 0; instance < _aux_global_pos_subs.size(); ++instance)
 	{
+		const uint8_t instance_bit = static_cast<uint8_t>(1u << instance);
+
+		if ((_allowed_aux_instance_mask & instance_bit) == 0)
+		{
+			continue;
+		}
+
 		aux_global_position_s aux_global_pos{};
 
 		if (!_aux_global_pos_subs[instance].update(&aux_global_pos))
@@ -168,7 +169,7 @@ void GnssSpoofingDetector::maybeGrabAuxPosition()
 
 		uint64_t time_us{0};
 
-		if (!isAuxSourceValid(aux_global_pos, _allowed_aux_sources_mask, time_us))
+		if (!isAuxPositionValid(aux_global_pos, time_us))
 		{
 			continue;
 		}
