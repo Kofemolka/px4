@@ -151,6 +151,7 @@ private:
 
 	void UpdateSystemFlags(hrt_abstime timestamp);
 	void UpdateMotionDetector(const imuSample& imu_sample);
+	void UpdateGnssParameters();
 
 	void PublishAttitude(const hrt_abstime &timestamp);
 	void PublishLocalPosition(const hrt_abstime &timestamp);
@@ -240,6 +241,9 @@ private:
 
 	bool _callback_registered{false};
 	bool _system_flags_initialized{false};
+
+	int32_t _applied_gps_instance{-1};
+	int32_t _applied_spoofing_detector_aux_sources{-1};
 
 	Ekf _ekf;
 
