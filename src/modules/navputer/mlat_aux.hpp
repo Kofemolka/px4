@@ -40,6 +40,7 @@ private:
 	struct BeaconInput {
 		matrix::Vector2f pos; // local north/east, m
 		float range{0.f};     // flattened 2D ground range, m
+		float range_accuracy{0.f};     // stddev = 1-sigma uncertainty, m
 		uint64_t timestamp_sample{0};
 	};
 
@@ -96,7 +97,11 @@ private:
 				    bool &centered_on_known_point);
 
 	// standard 2-D HDOP from the Fisher information matrix of unit line-of-sight vectors
-	bool calcHdop(const matrix::Vector2f &from, const BeaconInput *inputs, int num_inputs, float &hdop);
+	bool calcHdop(const matrix::Vector2f &from,
+			const BeaconInput *inputs,
+			int num_inputs,
+			float &hdop,
+			matrix::SquareMatrix<float, 2> *geometry_covariance = nullptr);
 
 	void solveCandidate(Candidate &candidate, const BeaconInput *inputs, int num_inputs);
 
@@ -112,6 +117,10 @@ private:
 		      Candidate &solution);
 
 	void updateBeaconStore();
+	float calculateMlatEph(const BeaconInput* const inputs,
+				const int num_inputs,
+				const matrix::Vector2f& solution_pos,
+				const matrix::SquareMatrix<float, 2>& geometry_covariance) const;
 	bool solve();
 
 	uORB::Subscription _ranging_beacon_sub {ORB_ID(ranging_beacon)};

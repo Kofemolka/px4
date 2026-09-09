@@ -15,7 +15,13 @@ void FusionController::updateParams()
 	_fc.baro.enabled = _param_npt_fuse_baro.get();
 	_fc.mag.enabled = _param_npt_fuse_mag.get();
 	_fc.rngbcn.enabled = _param_npt_fuse_rngbc.get();
-	_fc.gps.enabled = _param_npt_fuse_gps.get();
+	_fc.gps.enabled = _param_npt_fuse_gps.get() && _gps_trusted;
+}
+
+void FusionController::setGpsTrusted(bool trusted)
+{
+	_gps_trusted = trusted;
+	_fc.gps.enabled = _param_npt_fuse_gps.get() && _gps_trusted;
 }
 
 void FusionController::update(Ekf &ekf)

@@ -442,6 +442,22 @@ static void printRingBuffer(const char *name, TimestampedRingBuffer<T> *rb)
 	}
 }
 
+DeltaVelocityEarth Ekf::immediateLatestDeltaVelocity() const
+{
+	DeltaVelocityEarth delta_velocity = _output_predictor.immediateLatestDeltaVelocity();
+
+	// Conservative isotropic delta-velocity uncertainty
+	const Vector3f accel_bias_variance = getAccelBiasVariance();
+	const float max_accel_bias_variance = math::max(
+		accel_bias_variance(0),
+		math::max(accel_bias_variance(1),
+			accel_bias_variance(2)));
+	const float delta_velocity_variance = (_params.ekf2_acc_noise * _params.ekf2_acc_noise + max_accel_bias_variance) * delta_velocity.dt * delta_velocity.dt;
+
+	delta_velocity.delta_velocity_variance_ned = { delta_velocity_variance, delta_velocity_variance, delta_velocity_variance };
+	return delta_velocity;
+}
+
 void Ekf::print_status()
 {
 	printf("\nStates: (%.4f seconds ago)\n", (_time_latest_us - _time_delayed_us) * 1e-6);

@@ -100,6 +100,7 @@
 #include "motion_detector.hpp"
 #include "copilot_lifecycle.hpp"
 #include "elevation_initializer.hpp"
+#include "gnss_spoofing_detector/gnss_spoofing_detector.hpp"
 
 #include "mlat_aux.hpp"
 #include "fusion_controller.hpp"
@@ -150,6 +151,7 @@ private:
 
 	void UpdateSystemFlags(hrt_abstime timestamp);
 	void UpdateMotionDetector(const imuSample& imu_sample);
+	void UpdateGnssParameters();
 
 	void PublishAttitude(const hrt_abstime &timestamp);
 	void PublishLocalPosition(const hrt_abstime &timestamp);
@@ -177,7 +179,7 @@ private:
 	void UpdateMagSample(ekf2_timestamps_s &ekf2_timestamps);
 	void UpdateBaroSample(ekf2_timestamps_s &ekf2_timestamps);
 	void UpdateRangingBeaconSample(ekf2_timestamps_s &ekf2_timestamps);
-	void UpdateGpsSample(ekf2_timestamps_s &ekf2_timestamps);
+	void UpdateGpsSample(ekf2_timestamps_s &ekf2_timestamps, const SpoofReport& report);
 
 	void UpdateCalibration(const hrt_abstime &timestamp, InFlightCalibration &cal, const matrix::Vector3f &bias,
 			       const matrix::Vector3f &bias_variance, float bias_limit, bool bias_valid, bool learning_valid);
@@ -240,6 +242,9 @@ private:
 	bool _callback_registered{false};
 	bool _system_flags_initialized{false};
 
+	int32_t _applied_gps_instance{-1};
+	int32_t _applied_spoofing_detector_aux_instance_mask{-1};
+
 	Ekf _ekf;
 
 	MlatAux _mlat_aux;
@@ -247,6 +252,7 @@ private:
 	MotionDetector _motion_detector;
 	CopilotLifecycle _copilot_lifecycle;
 	ElevationInitializer _elevation_initializer;
+	GnssSpoofingDetector _gnss_spoofing_detector;
 
 	parameters *_params;
 
@@ -277,7 +283,8 @@ private:
 		(ParamExtInt<px4::params::EKF2_REQ_FIX>)       _param_ekf2_req_fix,
 		(ParamFloat<px4::params::EKF2_REQ_GPS_H>)      _param_ekf2_req_gps_h,
 		(ParamExtFloat<px4::params::EKF2_GSF_TAS>)     _param_ekf2_gsf_tas,
-		(ParamFloat<px4::params::EKF2_GPS_YAW_OFF>)    _param_ekf2_gps_yaw_off
+		(ParamFloat<px4::params::EKF2_GPS_YAW_OFF>)    _param_ekf2_gps_yaw_off,
+		(ParamInt<px4::params::NPT_SD_AUX_INST>)       _param_npt_sd_aux_instance_mask
 	)
 };
 #endif // !NAVPUTER_HPP

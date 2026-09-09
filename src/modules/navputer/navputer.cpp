@@ -69,8 +69,10 @@ Navputer::Navputer(const px4::wq_config_t &config, bool replay_mode):
 	_param_ekf2_req_hdrift(_params->ekf2_req_hdrift),
 	_param_ekf2_req_vdrift(_params->ekf2_req_vdrift),
 	_param_ekf2_req_fix(_params->ekf2_req_fix),
-	_param_ekf2_gsf_tas(_params->ekf2_gsf_tas)
+	_param_ekf2_gsf_tas(_params->ekf2_gsf_tas),
+	_param_npt_sd_aux_instance_mask{}
 {
+	UpdateGnssParameters();
 	AdvertiseTopics();
 }
 
@@ -141,6 +143,27 @@ int Navputer::print_status(bool verbose)
 	return 0;
 }
 
+void Navputer::UpdateGnssParameters()
+{
+	const int32_t gps_instance = _param_npt_gps_instance.get();
+
+	if (gps_instance != _applied_gps_instance
+		&& gps_instance >= 0
+		&& gps_instance < static_cast<int32_t>(_vehicle_gps_position_subs.size()))
+	{
+		_gnss_spoofing_detector.setGnssInstance(gps_instance);
+		_applied_gps_instance = gps_instance;
+	}
+
+	const int32_t aux_instance_mask = _param_npt_sd_aux_instance_mask.get();
+
+	if (aux_instance_mask != _applied_spoofing_detector_aux_instance_mask)
+	{
+		_gnss_spoofing_detector.setAllowedAuxInstanceMask(static_cast<uint8_t>(aux_instance_mask));
+		_applied_spoofing_detector_aux_instance_mask = aux_instance_mask;
+	}
+}
+
 void Navputer::Run()
 {
 	if (should_exit()) {
@@ -158,8 +181,9 @@ void Navputer::Run()
 
 		// update parameters from storage
 		updateParams();
-
 		_ekf.updateParameters();
+
+		UpdateGnssParameters();
 	}
 
 	if(!_callback_registered) {
@@ -224,6 +248,7 @@ void Navputer::Run()
 
 		// push imu data into estimator
 		_ekf.setIMUData(imu_sample_new);
+		_gnss_spoofing_detector.update(_ekf.immediateLatestDeltaVelocity());
 
 		UpdateMotionDetector(imu_sample_new);
 
@@ -249,7 +274,10 @@ void Navputer::Run()
 			.visual_odometry_timestamp_rel = ekf2_timestamps_s::RELATIVE_TIMESTAMP_INVALID,
 		};
 
-		UpdateGpsSample(ekf2_timestamps);
+		const auto gnss_spoof_report = _gnss_spoofing_detector.report();
+		_fusion_controller.setGpsTrusted(gnss_spoof_report.state == GnssSpoofingState::Trusted);
+
+		UpdateGpsSample(ekf2_timestamps, gnss_spoof_report);
 		UpdateBaroSample(ekf2_timestamps);
 		UpdateMagSample(ekf2_timestamps);
 		UpdateRangingBeaconSample(ekf2_timestamps);
@@ -681,9 +709,9 @@ void Navputer::UpdateRangingBeaconSample(ekf2_timestamps_s &ekf2_timestamps)
 	}
 }
 
-void Navputer::UpdateGpsSample(ekf2_timestamps_s &ekf2_timestamps)
+void Navputer::UpdateGpsSample(ekf2_timestamps_s &ekf2_timestamps, const SpoofReport& report)
 {
-	const auto needed_gps_instance = _param_npt_gps_instance.get();
+	const auto needed_gps_instance = _applied_gps_instance;
 
 	for (int instance = 0; instance < _vehicle_gps_position_subs.size(); ++instance)
 	{
@@ -735,9 +763,9 @@ void Navputer::UpdateGpsSample(ekf2_timestamps_s &ekf2_timestamps)
 			.lon = vehicle_gps_position.longitude_deg,
 			.alt = altitude_amsl,
 			.vel = vel_ned,
-			.hacc = vehicle_gps_position.eph,
+			.hacc = vehicle_gps_position.eph * report.pos_stddev_mult,
 			.vacc = vehicle_gps_position.epv,
-			.sacc = vehicle_gps_position.s_variance_m_s,
+			.sacc = vehicle_gps_position.s_variance_m_s * report.vel_stddev_mult,
 			.fix_type = vehicle_gps_position.fix_type,
 			.nsats = vehicle_gps_position.satellites_used,
 			.pdop = sqrtf(vehicle_gps_position.hdop *vehicle_gps_position.hdop
@@ -752,10 +780,9 @@ void Navputer::UpdateGpsSample(ekf2_timestamps_s &ekf2_timestamps)
 					     vehicle_gps_position.antenna_offset_z),
 		};
 
-		// TODO: to check if it is being spoofed before fuse
 		_ekf.setGpsData(gnss_sample);
 
-		// TODO: to look closer and decide whether we should reuse it
+		// TODO: to look closer and decide whether we should reuse it from EKF2
 		//const float geoid_height = altitude_ellipsoid - altitude_amsl;
 
 		//if (_last_geoid_height_update_us == 0) {
@@ -768,7 +795,6 @@ void Navputer::UpdateGpsSample(ekf2_timestamps_s &ekf2_timestamps)
 		//	_geoid_height_lpf.update(geoid_height);
 		//	_last_geoid_height_update_us = gnss_sample.time_us;
 		//}
-
 	}
 }
 
