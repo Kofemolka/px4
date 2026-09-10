@@ -24,3 +24,10 @@ menuconfig USER_MAVLINK
 	depends on BOARD_PROTECTED && MODULES_MAVLINK
 	---help---
 		Put mavlink in userspace memory
+
+config MAVLINK_SOURCE_NAVPUTER
+	bool "Use Navputer as MAVLink position source"
+	depends on MODULES_MAVLINK && MODULES_NAVPUTER
+	default n
+	---help---
+		Use Navputer as MAVLink position source instead of EKF2.

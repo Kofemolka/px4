@@ -34,7 +34,11 @@
 #ifndef LOCAL_POSITION_NED_HPP
 #define LOCAL_POSITION_NED_HPP
 
+#ifdef CONFIG_MAVLINK_SOURCE_NAVPUTER
+#include <uORB/topics/navput_local_position.h>
+#else
 #include <uORB/topics/vehicle_local_position.h>
+#endif
 
 class MavlinkStreamLocalPositionNED : public MavlinkStream
 {
@@ -55,9 +59,41 @@ public:
 private:
 	explicit MavlinkStreamLocalPositionNED(Mavlink *mavlink) : MavlinkStream(mavlink) {}
 
+	bool send() override
+	{
+		return sendImpl();
+	}
+
+#ifdef CONFIG_MAVLINK_SOURCE_NAVPUTER
+	uORB::Subscription _lpos_sub{ORB_ID(navput_local_position)};
+
+	bool sendImpl()
+	{
+		navput_local_position_s lpos;
+
+		if (_lpos_sub.update(&lpos)) {
+			mavlink_local_position_ned_t msg{};
+
+			msg.time_boot_ms = lpos.timestamp / 1000;
+			msg.x = lpos.x;
+			msg.y = lpos.y;
+			msg.z = lpos.z;
+			msg.vx = lpos.vx;
+			msg.vy = lpos.vy;
+			msg.vz = lpos.vz;
+
+			mavlink_msg_local_position_ned_send_struct(_mavlink->get_channel(), &msg);
+
+			return true;
+
+		}
+
+		return false;
+	}
+#else //CONFIG_MAVLINK_SOURCE_NAVPUTER
 	uORB::Subscription _lpos_sub{ORB_ID(vehicle_local_position)};
 
-	bool send() override
+	bool sendImpl()
 	{
 		vehicle_local_position_s lpos;
 
@@ -80,6 +116,7 @@ private:
 
 		return false;
 	}
+#endif //CONFIG_MAVLINK_SOURCE_NAVPUTER
 };
 
 #endif // LOCAL_POSITION_NED_HPP
