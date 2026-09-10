@@ -41,10 +41,27 @@
 #ifndef HISTORY_RING_BUFFER_HPP
 #define HISTORY_RING_BUFFER_HPP
 
-#include <array>
 #include <cstddef>
 #include <cstdint>
-#include <optional>
+
+// Minimal optional-value holder.
+// <optional> is not available on the target NuttX C++ toolchain, so
+// HistoryRingBuffer rolls its own instead of pulling in the STL header.
+template<typename T>
+class OptionalValue
+{
+public:
+	OptionalValue() = default;
+	OptionalValue(const T &value) : _value(value), _has_value(true) {}
+
+	explicit operator bool() const { return _has_value; }
+	const T &operator*() const { return _value; }
+	const T *operator->() const { return &_value; }
+
+private:
+	T _value{};
+	bool _has_value{false};
+};
 
 // Fixed-capacity timestamp-ordered history.
 // T must contain uint64_t time_us;
@@ -55,8 +72,7 @@ class HistoryRingBuffer
 	static_assert(Capacity > 0, "HistoryRingBuffer capacity must be positive");
 
 public:
-	struct BracketIndices
-	{
+	struct BracketIndices {
 		size_t before;
 		size_t after;
 	};
@@ -64,8 +80,9 @@ public:
 	// Push a newer sample
 	bool push(const T &sample)
 	{
-		if (!empty() && sample.time_us <= newest().time_us)
+		if (!empty() && sample.time_us <= newest().time_us) {
 			return false;
+		}
 
 		_samples[_next] = sample;
 		_next = (_next + 1) % Capacity;
@@ -107,40 +124,44 @@ public:
 
 	// Binary Search:
 	// Find the newest sample whose timestamp is <= requested time.
-	std::optional<size_t> findLastAtOrBefore(uint64_t time_us) const
+	OptionalValue<size_t> findLastAtOrBefore(uint64_t time_us) const
 	{
 		if (empty() || time_us < oldest().time_us)
-			return std::nullopt;
+			return {};
 
-		if (time_us >= newest().time_us)
+		if (time_us >= newest().time_us) {
 			return _count - 1;
+		}
 
 		size_t low = 0;
 		size_t high = _count - 1;
 
-		while (low < high)
-		{
+		while (low < high) {
 			const size_t middle = low + (high - low + 1) / 2;
-			if (atOldestOffset(middle).time_us <= time_us)
+
+			if (atOldestOffset(middle).time_us <= time_us) {
 				low = middle;
-			else
+
+			} else {
 				high = middle - 1;
+			}
 		}
 
 		return low;
 	}
 
-	// Find samples s1, s2 
+	// Find samples s1, s2
 	// If no sample == time_us: return {s1, s2} which: s1 < time_us < s2
 	// If there is an sample == time_us: find it and return as {sample, sample}
-	std::optional<BracketIndices> findBracket(uint64_t time_us) const
+	OptionalValue<BracketIndices> findBracket(uint64_t time_us) const
 	{
 		const auto before_index = findLastAtOrBefore(time_us);
 
 		if (!before_index)
-			return std::nullopt;
+			return {};
 
 		const size_t before = *before_index;
+
 		const T &before_sample = atOldestOffset(before);
 
 		if (before_sample.time_us == time_us)
@@ -149,13 +170,13 @@ public:
 		const size_t after = before + 1;
 
 		if (after >= _count)
-			return std::nullopt;
+			return {};
 
 		return BracketIndices{before, after};
 	}
 
 private:
-	std::array<T, Capacity> _samples{};
+	T _samples[Capacity] {};
 	size_t _next{0};
 	size_t _count{0};
 };
