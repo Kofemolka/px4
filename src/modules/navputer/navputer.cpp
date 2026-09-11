@@ -39,6 +39,12 @@ using matrix::Eulerf;
 using matrix::Quatf;
 using matrix::Vector3f;
 
+namespace
+{
+static constexpr float kDefaultExternalPosAccuracy = 50.0f; // [m]
+static constexpr float kMaxDelaySecondsExternalPosMeasurement = 15.0f; // [s]
+} // namespace
+
 pthread_mutex_t navputer_module_mutex = PTHREAD_MUTEX_INITIALIZER;
 static px4::atomic<Navputer *> _instance {};
 
@@ -164,6 +170,131 @@ void Navputer::UpdateGnssParameters()
 	}
 }
 
+void Navputer::maybeHandleExternalCommands()
+{
+	if (_vehicle_command_sub.updated())
+	{
+		vehicle_command_s vehicle_command;
+
+		if (_vehicle_command_sub.update(&vehicle_command))
+		{
+			vehicle_command_ack_s command_ack{};
+			command_ack.command = vehicle_command.command;
+			command_ack.target_system = vehicle_command.source_system;
+			command_ack.target_component = vehicle_command.source_component;
+
+			if (vehicle_command.command == vehicle_command_s::VEHICLE_CMD_SET_GPS_GLOBAL_ORIGIN
+			    || vehicle_command.command == vehicle_command_s::VEHICLE_CMD_DO_SET_GLOBAL_ORIGIN)
+			{
+				double latitude = vehicle_command.param5;
+				double longitude = vehicle_command.param6;
+				float altitude = vehicle_command.param7;
+
+				if (_ekf.setEkfGlobalOrigin(latitude, longitude, altitude))
+				{
+					// Validate the ekf origin status.
+					uint64_t origin_time {};
+					_ekf.getEkfGlobalOrigin(origin_time, latitude, longitude, altitude);
+					PX4_INFO("Navputer - New NED origin (LLA): %3.10f, %3.10f, %4.3f",
+						 latitude, longitude, static_cast<double>(altitude));
+
+					command_ack.result = vehicle_command_ack_s::VEHICLE_CMD_RESULT_ACCEPTED;
+
+				}
+				else
+				{
+					PX4_ERR("Navputer - Failed to set new NED origin (LLA): %3.10f, %3.10f, %4.3f",
+						latitude, longitude, static_cast<double>(altitude));
+
+					command_ack.result = vehicle_command_ack_s::VEHICLE_CMD_RESULT_FAILED;
+				}
+
+				command_ack.timestamp = hrt_absolute_time();
+				_vehicle_command_ack_pub.publish(command_ack);
+
+			}
+			else if (vehicle_command.command == vehicle_command_s::VEHICLE_CMD_EXTERNAL_POSITION_ESTIMATE)
+			{
+
+				if (PX4_ISFINITE(vehicle_command.param2)
+				    && PX4_ISFINITE(vehicle_command.param5)
+				    && PX4_ISFINITE(vehicle_command.param6))
+				{
+
+					const float measurement_delay_seconds = math::constrain(vehicle_command.param2, 0.0f,
+										kMaxDelaySecondsExternalPosMeasurement);
+					const uint64_t timestamp_observation = vehicle_command.timestamp - measurement_delay_seconds * 1_s;
+
+					float accuracy = kDefaultExternalPosAccuracy;
+
+					if (PX4_ISFINITE(vehicle_command.param3) && vehicle_command.param3 > FLT_EPSILON)
+					{
+						accuracy = vehicle_command.param3;
+					}
+
+					const double latitude = vehicle_command.param5;
+					const double longitude = vehicle_command.param6;
+					const float altitude = vehicle_command.param7;
+
+					if (_ekf.resetGlobalPosToExternalObservation(
+						latitude,
+						longitude,
+						altitude,
+						accuracy,
+						accuracy,
+						timestamp_observation))
+					{
+
+						PX4_INFO("Navputer - New Global Position (LLA): %3.10f, %3.10f, %4.3f",
+							 latitude, longitude, static_cast<double>(altitude));
+						command_ack.result = vehicle_command_ack_s::VEHICLE_CMD_RESULT_ACCEPTED;
+					}
+					else
+					{
+						PX4_ERR("Navputer - Failed to set New Global Position (LLA): %3.10f, %3.10f, %4.3f",
+							 latitude, longitude, static_cast<double>(altitude));
+						command_ack.result = vehicle_command_ack_s::VEHICLE_CMD_RESULT_FAILED;
+					}
+
+				}
+				else
+				{
+					command_ack.result = vehicle_command_ack_s::VEHICLE_CMD_RESULT_TEMPORARILY_REJECTED; // TODO: expand
+				}
+
+				command_ack.timestamp = hrt_absolute_time();
+				_vehicle_command_ack_pub.publish(command_ack);
+			}
+			else if (vehicle_command.command == vehicle_command_s::VEHICLE_CMD_EXTERNAL_ATTITUDE_ESTIMATE)
+			{
+				if (PX4_ISFINITE(vehicle_command.param3))
+				{
+					const float heading = wrap_pi(math::radians(vehicle_command.param3));
+					static constexpr float kDefaultHeadingAccuracyDeg = 20.f;
+					const float heading_accuracy = math::radians(PX4_ISFINITE(vehicle_command.param7)
+								       ? vehicle_command.param7
+								       : kDefaultHeadingAccuracyDeg);
+
+					_ekf.resetHeadingToExternalObservation(heading, heading_accuracy);
+					PX4_INFO("Navputer - New Heading (deg): %3.10f, %3.10f",
+						 static_cast<double>(math::degrees(heading)),
+						 static_cast<double>(math::degrees(heading_accuracy)));
+					command_ack.result = vehicle_command_ack_s::VEHICLE_CMD_RESULT_ACCEPTED;
+
+				}
+				else
+				{
+					PX4_ERR("Navputer - Failed to set New Heading (deg)");
+					command_ack.result = vehicle_command_ack_s::VEHICLE_CMD_RESULT_UNSUPPORTED;
+				}
+
+				command_ack.timestamp = hrt_absolute_time();
+				_vehicle_command_ack_pub.publish(command_ack);
+			}
+		}
+	}
+}
+
 void Navputer::Run()
 {
 	if (should_exit()) {
@@ -194,6 +325,8 @@ void Navputer::Run()
 			return;
 		}
 	}
+
+	maybeHandleExternalCommands();
 
 	bool imu_updated = false;
 	imuSample imu_sample_new {};
