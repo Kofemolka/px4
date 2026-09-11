@@ -78,6 +78,8 @@ px4_add_module(
 		${EKF_BASE_DIR}
 		${EKF_BASE_DIR}/EKF
 		${EKF_GENERATED_DERIVATION_INCLUDE_PATH}
+		gnss_spoofing_detector
+
 	PRIORITY
 		"SCHED_PRIORITY_MAX - 18" # max priority below high priority WQ threads
 	STACK_MAX
@@ -92,6 +94,8 @@ px4_add_module(
 
 	DEPENDS
 		${NAVPUTER_LIBS}
+		lat_lon_alt
 	UNITY_BUILD
 	)
 
+add_dependencies(modules__navputer parameters_header)

@@ -53,6 +53,7 @@ AK09916::~AK09916()
 	perf_free(_bad_register_perf);
 	perf_free(_bad_transfer_perf);
 	perf_free(_magnetic_sensor_overflow_perf);
+	perf_free(_drdy_not_ready_perf);
 }
 
 int AK09916::init()
@@ -84,6 +85,7 @@ void AK09916::print_status()
 	perf_print_counter(_bad_register_perf);
 	perf_print_counter(_bad_transfer_perf);
 	perf_print_counter(_magnetic_sensor_overflow_perf);
+	perf_print_counter(_drdy_not_ready_perf);
 }
 
 int AK09916::probe()
@@ -110,6 +112,17 @@ int AK09916::probe()
 
 		case AKTYPE::AK09918:
 			_device = AKTYPE::AK09918;
+			return PX4_OK;
+
+		case AKTYPE::AK09911:
+			// Not a real AK09916: forced match on the closest-available driver. The
+			// AK09911's ASA fuse-ROM per-axis sensitivity trim is not applied, so raw
+			// readings use AK09916's fixed scale instead of a calibrated one. PX4's
+			// onboard compass calibration (per-axis scale/offset fit) largely
+			// compensates for this, but expect it to be less accurate out of the box
+			// than a real AK09916.
+			PX4_WARN("AK09911 detected, forcing AK09916 driver as closest match");
+			_device = AKTYPE::AK09911;
 			return PX4_OK;
 
 		default:
@@ -196,6 +209,10 @@ void AK09916::RunImpl()
 
 			bool success = false;
 
+			if (ret != PX4_OK) {
+				perf_count(_bad_transfer_perf);
+			}
+
 			if (ret == PX4_OK) {
 				if (buffer.ST2 & ST2_BIT::HOFL) {
 					perf_count(_magnetic_sensor_overflow_perf);
@@ -216,14 +233,24 @@ void AK09916::RunImpl()
 					if (_failure_count > 0) {
 						_failure_count--;
 					}
+
+				} else {
+					perf_count(_drdy_not_ready_perf);
 				}
 			}
 
 			if (!success) {
 				_failure_count++;
 
+				// AK09911 forced onto this driver (see probe()) occasionally misses
+				// DRDY on schedule; tolerate longer runs before forcing a full reset,
+				// since the reset itself (RESET -> WAIT_FOR_RESET -> CONFIGURE, each
+				// gated by a 100ms delay) is what turns a brief hiccup into a
+				// guaranteed failover trip against VehicleMagnetometer's 300ms timeout.
+				const uint8_t failure_limit = (_device == AKTYPE::AK09911) ? 50 : 10;
+
 				// full reset if things are failing consistently
-				if (_failure_count > 10) {
+				if (_failure_count > failure_limit) {
 					Reset();
 					return;
 				}
@@ -265,8 +292,20 @@ bool AK09916::Configure()
 		}
 	}
 
-	// mag resolution is 1.5 milli Gauss per bit (0.15 μT/LSB)
-	_px4_mag.set_scale(1.5e-3f);
+	switch (_device) {
+	case AKTYPE::AK09911:
+		// AK09911 forced onto this driver (see probe()): nominal 0.6 μT/LSB, roughly
+		// 4x coarser than a real AK09916. ASA per-axis fuse-ROM trim still isn't
+		// applied, so this is approximate, but it's needed to land calibration's
+		// fitted field magnitude inside lm_fit.cpp's accepted [0.2, 0.7] Gauss range.
+		_px4_mag.set_scale(6e-3f);
+		break;
+
+	default:
+		// mag resolution is 1.5 milli Gauss per bit (0.15 μT/LSB)
+		_px4_mag.set_scale(1.5e-3f);
+		break;
+	}
 
 	return success;
 }
