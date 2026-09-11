@@ -195,7 +195,7 @@ void Navputer::maybeHandleExternalCommands()
 					// Validate the ekf origin status.
 					uint64_t origin_time {};
 					_ekf.getEkfGlobalOrigin(origin_time, latitude, longitude, altitude);
-					PX4_INFO("Navputer - New NED origin (LLA): %3.10f, %3.10f, %4.3f\n",
+					PX4_INFO("Navputer - New NED origin (LLA): %3.10f, %3.10f, %4.3f",
 						 latitude, longitude, static_cast<double>(altitude));
 
 					command_ack.result = vehicle_command_ack_s::VEHICLE_CMD_RESULT_ACCEPTED;
@@ -203,7 +203,7 @@ void Navputer::maybeHandleExternalCommands()
 				}
 				else
 				{
-					PX4_ERR("Navputer - Failed to set new NED origin (LLA): %3.10f, %3.10f, %4.3f\n",
+					PX4_ERR("Navputer - Failed to set new NED origin (LLA): %3.10f, %3.10f, %4.3f",
 						latitude, longitude, static_cast<double>(altitude));
 
 					command_ack.result = vehicle_command_ack_s::VEHICLE_CMD_RESULT_FAILED;
@@ -232,18 +232,27 @@ void Navputer::maybeHandleExternalCommands()
 						accuracy = vehicle_command.param3;
 					}
 
+					const double latitude = vehicle_command.param5;
+					const double longitude = vehicle_command.param6;
+					const float altitude = vehicle_command.param7;
+
 					if (_ekf.resetGlobalPosToExternalObservation(
-						vehicle_command.param5,
-						vehicle_command.param6,
-						vehicle_command.param7,
+						latitude,
+						longitude,
+						altitude,
 						accuracy,
 						accuracy,
 						timestamp_observation))
 					{
+
+						PX4_INFO("Navputer - New Global Position (LLA): %3.10f, %3.10f, %4.3f",
+							 latitude, longitude, static_cast<double>(altitude));
 						command_ack.result = vehicle_command_ack_s::VEHICLE_CMD_RESULT_ACCEPTED;
 					}
 					else
 					{
+						PX4_ERR("Navputer - Failed to set New Global Position (LLA): %3.10f, %3.10f, %4.3f",
+							 latitude, longitude, static_cast<double>(altitude));
 						command_ack.result = vehicle_command_ack_s::VEHICLE_CMD_RESULT_FAILED;
 					}
 
@@ -265,12 +274,17 @@ void Navputer::maybeHandleExternalCommands()
 					const float heading_accuracy = math::radians(PX4_ISFINITE(vehicle_command.param7)
 								       ? vehicle_command.param7
 								       : kDefaultHeadingAccuracyDeg);
+
 					_ekf.resetHeadingToExternalObservation(heading, heading_accuracy);
+					PX4_INFO("Navputer - New Heading (deg): %3.10f, %3.10f",
+						 static_cast<double>(math::degrees(heading)),
+						 static_cast<double>(math::degrees(heading_accuracy)));
 					command_ack.result = vehicle_command_ack_s::VEHICLE_CMD_RESULT_ACCEPTED;
 
 				}
 				else
 				{
+					PX4_ERR("Navputer - Failed to set New Heading (deg)");
 					command_ack.result = vehicle_command_ack_s::VEHICLE_CMD_RESULT_UNSUPPORTED;
 				}
 
