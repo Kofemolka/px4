@@ -1,6 +1,8 @@
 #include "gnss_spoof_gen.hpp"
 
 #include <drivers/drv_hrt.h>
+#include <drivers/drv_sensor.h>
+#include <lib/drivers/device/Device.hpp>
 
 #include <cstring>
 #include <charconv>
@@ -287,6 +289,17 @@ void GnssSpoofGen::maybeInitOrigin(sensor_gps_s& gps)
 	}
 }
 
+uint32_t getSpoofedDeviceId()
+{
+	device::Device::DeviceId device_id{};
+	device_id.devid_s.bus_type = device::Device::DeviceBusType::DeviceBusType_SIMULATION;
+	device_id.devid_s.bus = 0;
+	device_id.devid_s.address = 1;
+	device_id.devid_s.devtype = DRV_GPS_DEVTYPE_SIM;
+
+	return device_id.devid;
+}
+
 void GnssSpoofGen::Run()
 {
 	if (should_exit())
@@ -346,6 +359,7 @@ void GnssSpoofGen::Run()
 	}
 
 	gps.timestamp = hrt_absolute_time();
+	gps.device_id = getSpoofedDeviceId();
 	_gps1_pub.publish(gps);
 }
 
