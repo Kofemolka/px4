@@ -200,6 +200,17 @@ void LoggedTopics::add_default_topics()
 	add_optional_topic_multi("estimator_status_flags", 10);
 	add_optional_topic_multi("yaw_estimator_status", 1000);
 
+#if defined(CONFIG_MODULES_NAVPUTER) && CONFIG_MODULES_NAVPUTER
+	add_topic("navput_attitude", 50); // matches vehicle_attitude
+	add_topic("navput_local_position", 100); // matches vehicle_local_position
+	add_topic("navput_status_flags", 10); // matches estimator_status_flags
+	add_topic("navput_fusion_control", 1000); // matches estimator_fusion_control
+	add_topic("navput_aid_src_baro_hgt", 500); // matches estimator_aid_src_* (kEKFVerboseIntervalMilliseconds)
+	add_topic("navput_aid_src_ranging_beacon", 50); // matches estimator_aid_src_* (kEKFVerboseIntervalMilliseconds)
+	add_topic("navput_gnss_spoof_detector", 500); // matches its native 2 Hz publish rate
+	add_optional_topic("estimator_aid_src_aux_global_position", 100);
+#endif // CONFIG_MODULES_NAVPUTER
+
 	// Vision target estimator topics
 #if defined(CONFIG_MODULES_VISION_TARGET_ESTIMATOR) && CONFIG_MODULES_VISION_TARGET_ESTIMATOR
 	add_topic("vte_input", 50);
