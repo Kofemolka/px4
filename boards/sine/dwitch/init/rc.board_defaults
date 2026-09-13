@@ -41,3 +41,6 @@ param set EKF2_EN 0
 param set-default SENS_EXT_I2C_PRB 0
 
 param set-default SDLOG_PROFILE 1
+
+# Navputer bench rig (real hardware; see ROMFS/px4fmu_common/init.d/airframes/22001_sine_dwitch)
+param set-default SYS_AUTOSTART 22001

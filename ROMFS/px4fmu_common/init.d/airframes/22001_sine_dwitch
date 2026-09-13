@@ -1,0 +1,10 @@
+#!/bin/sh
+#
+# @name Sine.Dwitch Navputer bench rig
+#
+# @type Quadrotor x
+# @class Copter
+#
+
+set VEHICLE_TYPE mc
+param set-default MAV_TYPE 2   # quadrotor, for correct GCS display only
