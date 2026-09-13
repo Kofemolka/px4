@@ -34,7 +34,11 @@
 #ifndef ATTITUDE_HPP
 #define ATTITUDE_HPP
 
+#ifdef CONFIG_MAVLINK_SOURCE_NAVPUTER
+#include <uORB/topics/navput_attitude.h>
+#else
 #include <uORB/topics/vehicle_attitude.h>
+#endif
 #include <uORB/topics/vehicle_angular_velocity.h>
 
 class MavlinkStreamAttitude : public MavlinkStream
@@ -56,10 +60,47 @@ public:
 private:
 	explicit MavlinkStreamAttitude(Mavlink *mavlink) : MavlinkStream(mavlink) {}
 
-	uORB::Subscription _att_sub{ORB_ID(vehicle_attitude)};
 	uORB::Subscription _angular_velocity_sub{ORB_ID(vehicle_angular_velocity)};
 
 	bool send() override
+	{
+		return sendImpl();
+	}
+
+#ifdef CONFIG_MAVLINK_SOURCE_NAVPUTER
+	uORB::Subscription _att_sub{ORB_ID(navput_attitude)};
+
+	bool sendImpl()
+	{
+		navput_attitude_s att;
+
+		if (_att_sub.update(&att)) {
+			vehicle_angular_velocity_s angular_velocity{};
+			_angular_velocity_sub.copy(&angular_velocity);
+
+			mavlink_attitude_t msg{};
+
+			const matrix::Eulerf euler = matrix::Quatf(att.q);
+			msg.time_boot_ms = att.timestamp / 1000;
+			msg.roll = euler.phi();
+			msg.pitch = euler.theta();
+			msg.yaw = euler.psi();
+
+			msg.rollspeed = angular_velocity.xyz[0];
+			msg.pitchspeed = angular_velocity.xyz[1];
+			msg.yawspeed = angular_velocity.xyz[2];
+
+			mavlink_msg_attitude_send_struct(_mavlink->get_channel(), &msg);
+
+			return true;
+		}
+
+		return false;
+	}
+#else //CONFIG_MAVLINK_SOURCE_NAVPUTER
+	uORB::Subscription _att_sub{ORB_ID(vehicle_attitude)};
+
+	bool sendImpl()
 	{
 		vehicle_attitude_s att;
 
@@ -86,6 +127,7 @@ private:
 
 		return false;
 	}
+#endif //CONFIG_MAVLINK_SOURCE_NAVPUTER
 };
 
 #endif // ATTITUDE_HPP

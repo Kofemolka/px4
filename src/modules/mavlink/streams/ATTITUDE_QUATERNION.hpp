@@ -34,7 +34,11 @@
 #ifndef ATTITUDE_QUATERNION_HPP
 #define ATTITUDE_QUATERNION_HPP
 
+#ifdef CONFIG_MAVLINK_SOURCE_NAVPUTER
+#include <uORB/topics/navput_attitude.h>
+#else
 #include <uORB/topics/vehicle_attitude.h>
+#endif
 #include <uORB/topics/vehicle_angular_velocity.h>
 #include <uORB/topics/vehicle_status.h>
 
@@ -57,11 +61,67 @@ public:
 private:
 	explicit MavlinkStreamAttitudeQuaternion(Mavlink *mavlink) : MavlinkStream(mavlink) {}
 
-	uORB::Subscription _att_sub{ORB_ID(vehicle_attitude)};
 	uORB::Subscription _angular_velocity_sub{ORB_ID(vehicle_angular_velocity)};
 	uORB::Subscription _status_sub{ORB_ID(vehicle_status)};
 
 	bool send() override
+	{
+		return sendImpl();
+	}
+
+#ifdef CONFIG_MAVLINK_SOURCE_NAVPUTER
+	uORB::Subscription _att_sub{ORB_ID(navput_attitude)};
+
+	bool sendImpl()
+	{
+		navput_attitude_s att;
+
+		if (_att_sub.update(&att)) {
+			vehicle_angular_velocity_s angular_velocity{};
+			_angular_velocity_sub.copy(&angular_velocity);
+
+			vehicle_status_s status{};
+			_status_sub.copy(&status);
+
+			mavlink_attitude_quaternion_t msg{};
+
+			msg.time_boot_ms = att.timestamp / 1000;
+			msg.q1 = att.q[0];
+			msg.q2 = att.q[1];
+			msg.q3 = att.q[2];
+			msg.q4 = att.q[3];
+			msg.rollspeed = angular_velocity.xyz[0];
+			msg.pitchspeed = angular_velocity.xyz[1];
+			msg.yawspeed = angular_velocity.xyz[2];
+
+			if (status.is_vtol && status.is_vtol_tailsitter && (status.vehicle_type == vehicle_status_s::VEHICLE_TYPE_FIXED_WING)) {
+				// This is a tailsitter VTOL flying in fixed wing mode:
+				// indicate that reported attitude should be rotated by
+				// 90 degrees upward pitch for user display
+				get_rot_quaternion(ROTATION_PITCH_90).copyTo(msg.repr_offset_q);
+
+			} else {
+				// Normal case
+				// zero rotation should be [1 0 0 0]:
+				// `get_rot_quaternion(ROTATION_NONE).copyTo(msg.repr_offset_q);`
+				// but to save bandwidth, we instead send [0, 0, 0, 0].
+				msg.repr_offset_q[0] = 0.0f;
+				msg.repr_offset_q[1] = 0.0f;
+				msg.repr_offset_q[2] = 0.0f;
+				msg.repr_offset_q[3] = 0.0f;
+			}
+
+			mavlink_msg_attitude_quaternion_send_struct(_mavlink->get_channel(), &msg);
+
+			return true;
+		}
+
+		return false;
+	}
+#else //CONFIG_MAVLINK_SOURCE_NAVPUTER
+	uORB::Subscription _att_sub{ORB_ID(vehicle_attitude)};
+
+	bool sendImpl()
 	{
 		vehicle_attitude_s att;
 
@@ -107,6 +167,7 @@ private:
 
 		return false;
 	}
+#endif //CONFIG_MAVLINK_SOURCE_NAVPUTER
 };
 
 #endif // ATTITUDE_QUATERNION_HPP
