@@ -101,6 +101,13 @@ parameters:
       min: 0
       max: 3
 
+    NPT_FC_SD_EN:
+      description:
+        short: Enable GPS anti-spoof
+        long: Give GnssSpoofingDetector control over GPS sensor fusion.
+      type: boolean
+      default: 0
+
     NPT_FC_AGP_LATCH:
       description:
         short: Minimum time to hold aux global position fusion enabled
