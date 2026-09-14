@@ -50,13 +50,105 @@ MotionDetector::MotionDetector(ModuleParams *parent)
 {
 }
 
-bool MotionDetector::is_imu_valid(const estimator::imuSample& input) const
+bool MotionDetector::isImuValid(const estimator::imuSample& input) const
 {
 	const bool valid = input.delta_ang_dt > 0
 		&& input.delta_vel_dt > 0
 		&& input.delta_ang.isAllFinite()
 		&& input.delta_vel.isAllFinite();
 	return valid;
+}
+
+void MotionDetector::transitionTo(const State new_state)
+{
+	if (new_state == _state)
+	{
+		return;
+	}
+
+	const State previous_state = _state;
+	_state = new_state;
+	PX4_INFO("[MT] state changed: %d -> %d", static_cast<int>(previous_state), static_cast<int>(new_state));
+}
+
+void MotionDetector::resetTimers()
+{
+	_stationary_candidate_started_at = 0;
+	_motion_candidate_started_at = 0;
+	_airborne_motion_candidate_started_at = 0;
+}
+
+void MotionDetector::updateWhileStationary(const uint64_t time_us, const float gyro_magnitude, const float accel_magnitude)
+{
+	_stationary_candidate_started_at = 0;
+	_airborne_motion_candidate_started_at = 0;
+
+	const bool definitely_moving =
+		gyro_magnitude >= _param_motion_gyro.get()
+		|| accel_magnitude >= _param_motion_accel.get();
+
+	if (definitely_moving)
+	{
+		const hrt_abstime mov_confirmation_time_us =
+			static_cast<hrt_abstime>(_param_motion_confirmation_time_ms.get()) * 1000ULL;
+
+		if (_motion_candidate_started_at == 0)
+		{
+			_motion_candidate_started_at = time_us;
+		}
+		else if (time_us >= _motion_candidate_started_at + mov_confirmation_time_us)
+		{
+			transitionTo(State::Moving);
+		}
+	}
+	else
+	{
+		_motion_candidate_started_at = 0;
+	}
+}
+
+void MotionDetector::updateWhileMoving(const uint64_t time_us, const float gyro_magnitude, const float accel_magnitude)
+{
+	_motion_candidate_started_at = 0;
+
+	if (_airborne_motion_candidate_started_at == 0)
+	{
+		_airborne_motion_candidate_started_at = time_us;
+	}
+
+	const bool stationary_enough =
+		gyro_magnitude < _param_motion_gyro.get()
+		&& accel_magnitude < _param_motion_accel.get();
+
+	if (stationary_enough)
+	{
+		// We don't want to reset _airborne_motion_candidate_started_at here because it should be reset only in LandedStationary state
+
+		const hrt_abstime stat_confirmation_time_us =
+			static_cast<hrt_abstime>(_param_stationary_confirmation_time_ms.get()) * 1000ULL;
+
+		if (_stationary_candidate_started_at == 0)
+		{
+			_stationary_candidate_started_at = time_us;
+		}
+		else if (time_us >= _stationary_candidate_started_at + stat_confirmation_time_us)
+		{
+			transitionTo(State::LandedStationary);
+			return;
+		}
+	}
+	else
+	{
+		_stationary_candidate_started_at = 0;
+	}
+
+	const hrt_abstime airborne_confirmation_time_us =
+		static_cast<hrt_abstime>(_param_airborne_motion_confirmation_time_ms.get()) * 1000ULL;
+
+	if (time_us >= _airborne_motion_candidate_started_at + airborne_confirmation_time_us)
+	{
+		transitionTo(State::AirborneMoving);
+	}
 }
 
 void MotionDetector::update(const estimator::imuSample& input)
@@ -66,9 +158,9 @@ void MotionDetector::update(const estimator::imuSample& input)
 		return;
 	}
 
-	if (!is_imu_valid(input))
+	if (!isImuValid(input))
 	{
-		_motion_candidate_started_at = 0;
+		resetTimers();
 		return;
 	}
 
@@ -78,32 +170,13 @@ void MotionDetector::update(const estimator::imuSample& input)
 	const float gyro_magnitude = gyro_rate.norm();
 	const float accel_magnitude = fabsf(accel_rate.norm() - CONSTANTS_ONE_G);
 
-	const bool definitely_moving =
-		gyro_magnitude > _param_motion_gyro.get()
-		|| accel_magnitude > _param_motion_accel.get();
-
-	if (definitely_moving)
+	if (_state == State::LandedStationary)
 	{
-		const hrt_abstime confirmation_time_us =
-			static_cast<hrt_abstime>(_param_motion_confirmation_time_ms.get()) * 1000ULL;
-
-		if (_motion_candidate_started_at == 0)
-		{
-			_motion_candidate_started_at = input.time_us;
-		}
-		else if (input.time_us >= _motion_candidate_started_at + confirmation_time_us)
-		{
-			const State previous_state = _state;
-			_state = State::AirborneMoving;
-
-			PX4_INFO("state changed: %s -> %s",
-				 previous_state == State::LandedStationary ? "LandedStationary" : "AirborneMoving",
-				 _state == State::LandedStationary ? "LandedStationary" : "AirborneMoving");
-		}
+		updateWhileStationary(input.time_us, gyro_magnitude, accel_magnitude);
 	}
-	else
+	else if (_state == State::Moving)
 	{
-		_motion_candidate_started_at = 0;
+		updateWhileMoving(input.time_us, gyro_magnitude, accel_magnitude);
 	}
 }
 
