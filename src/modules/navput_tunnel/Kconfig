@@ -1,0 +1,7 @@
+menuconfig MODULES_NAVPUT_TUNNEL
+	bool "navput_tunnel"
+	default n
+	select LIB_CDRSTREAM
+	---help---
+		Enable support for navput_tunnel, which streams navput/estimator
+		uORB topics to the GCS as CDR-encoded MAVLink TUNNEL messages.

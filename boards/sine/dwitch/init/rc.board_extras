@@ -12,3 +12,4 @@
 # dshot telemetry -d /dev/ttyS5
 
 navputer start
+navput_tunnel start

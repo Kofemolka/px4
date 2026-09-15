@@ -119,6 +119,7 @@ px4_add_module(
 		mavlink_simple_analyzer.cpp
 		mavlink_stream.cpp
 		mavlink_timesync.cpp
+		mavlink_tunnel_stream.cpp
 		mavlink_ulog.cpp
 		mavlink_sign_control.cpp
 		MavlinkStatustextHandler.cpp

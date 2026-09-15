@@ -2703,6 +2703,8 @@ Mavlink::task_main(int argc, char *argv[])
 			}
 		}
 
+		_mavlink_tunnel_stream.handle_update(get_channel());
+
 		/* handle new events */
 		if (check_events()) {
 			if (_event_sub.updated()) {

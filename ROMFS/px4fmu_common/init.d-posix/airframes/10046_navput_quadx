@@ -82,3 +82,4 @@ param set-default CAL_MAG_COMP_TYP 0
 
 spoofer start
 navputer start
+navput_tunnel start
