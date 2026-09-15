@@ -64,3 +64,8 @@ param set-default NPT_FC_SD_EN 0
 
 # Disable the battery/throttle magnetometer compensation
 param set-default CAL_MAG_COMP_TYP 0
+
+# AGP is param driven, no per-instance levers
+param set-default EKF2_AGP0_ID 111 # MLAT source
+param set-default EKF2_AGP0_CTRL 1 # enable AGP (both EKF instances)
+param set-default EKF2_AGP0_NOISE 250
