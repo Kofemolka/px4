@@ -53,6 +53,7 @@ public:
 	enum class State
 	{
 		LandedStationary,
+		Moving,
 		AirborneMoving,
 	};
 public:
@@ -62,19 +63,28 @@ public:
 	State state() const;
 
 private:
-	bool is_imu_valid(const estimator::imuSample& input) const;
+	bool isImuValid(const estimator::imuSample& input) const;
+
+	void transitionTo(const State new_state);
+	void resetTimers();
+	void updateWhileStationary(const uint64_t time_us, const float gyro_magnitude, const float accel_magnitude);
+	void updateWhileMoving(const uint64_t time_us, const float gyro_magnitude, const float accel_magnitude);
 
 private:
 	DEFINE_PARAMETERS(
 		// gates for MotionDetector
 		(ParamFloat<px4::params::NPT_MD_MOT_GYR>) _param_motion_gyro,
 		(ParamFloat<px4::params::NPT_MD_MOT_ACC>) _param_motion_accel,
-		(ParamInt<px4::params::NPT_MD_CF_TIME>) _param_motion_confirmation_time_ms
+		(ParamInt<px4::params::NPT_MD_ST_TIME>)  _param_stationary_confirmation_time_ms,
+		(ParamInt<px4::params::NPT_MD_MOT_TIME>) _param_motion_confirmation_time_ms,
+		(ParamInt<px4::params::NPT_MD_ABM_TIME>) _param_airborne_motion_confirmation_time_ms
 	)
 
 private:
 	State _state{State::LandedStationary};
 	hrt_abstime _motion_candidate_started_at{0};
+	hrt_abstime _stationary_candidate_started_at{0};
+	hrt_abstime _airborne_motion_candidate_started_at{0};
 };
 
 #endif // !MOTION_DETECTOR_1234_HPP
