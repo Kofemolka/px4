@@ -86,6 +86,7 @@
 #include "mavlink_receiver.h"
 #include "mavlink_sign_control.h"
 #include "mavlink_shell.h"
+#include "mavlink_tunnel_stream.h"
 #include "mavlink_ulog.h"
 
 #define DEFAULT_BAUD_RATE       57600
@@ -563,6 +564,7 @@ private:
 	MavlinkShell		*_mavlink_shell{nullptr};
 	pthread_mutex_t		_mavlink_shell_mutex{};
 	MavlinkULog		*_mavlink_ulog{nullptr};
+	MavlinkTunnelStream	_mavlink_tunnel_stream;
 	static events::EventBuffer	*_event_buffer;
 	events::SendProtocol		_events{*_event_buffer, *this};
 

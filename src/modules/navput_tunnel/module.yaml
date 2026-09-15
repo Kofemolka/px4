@@ -1,0 +1,13 @@
+module_name: navput_tunnel
+parameters:
+- group: NAVPUTER
+  definitions:
+    NPT_LOG_EN:
+      description:
+        short: Enable navput_tunnel MAVLink streaming
+        long: |-
+          When enabled, navput_tunnel CDR-encodes its subscribed navput/estimator
+          topics and streams them to the GCS as fragmented MAVLink TUNNEL messages.
+          When disabled, the module keeps running but does no work.
+      type: boolean
+      default: 0
