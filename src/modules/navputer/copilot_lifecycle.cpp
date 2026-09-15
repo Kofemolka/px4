@@ -56,7 +56,8 @@ void CopilotLifecycle::update(MotionDetector::State state)
 
 bool CopilotLifecycle::isArmed() const
 {
-	return _state == MotionDetector::State::AirborneMoving;
+	return _state == MotionDetector::State::AirborneMoving
+		|| _state == MotionDetector::State::Moving;
 }
 
 void CopilotLifecycle::publishVehicleStatus(hrt_abstime timestamp)

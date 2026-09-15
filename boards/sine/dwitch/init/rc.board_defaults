@@ -44,3 +44,23 @@ param set-default SDLOG_PROFILE 1
 
 # Navputer bench rig (real hardware; see ROMFS/px4fmu_common/init.d/airframes/22001_sine_dwitch)
 param set-default SYS_AUTOSTART 22001
+
+# ----
+# Navputer HW setup
+param set-default NPT_RNGBC_CTRL 1
+param set-default NPT_RNGBC_NOISE 75
+param set-default NPT_GPS_INSTANCE 0
+param set-default NPT_GPS_CTRL 7
+param set-default NPT_SD_AUX_INST 1 # aux_global_position instance #0 (Beacon MLAT)
+
+# Enable fusion of all NAVPUT sensors
+param set-default NPT_FUSE_BARO 1
+param set-default NPT_FUSE_MAG 1
+param set-default NPT_FUSE_RNGBC 1
+param set-default NPT_FUSE_AGP0 1
+param set-default NPT_FUSE_GPS 1
+param set-default NPT_FC_AGP_LATCH 5.0
+param set-default NPT_FC_SD_EN 0
+
+# Disable the battery/throttle magnetometer compensation
+param set-default CAL_MAG_COMP_TYP 0

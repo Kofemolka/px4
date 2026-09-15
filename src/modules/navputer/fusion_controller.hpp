@@ -32,6 +32,7 @@ private:
 		(ParamBool<px4::params::NPT_FUSE_RNGBC>) _param_npt_fuse_rngbc,
 		(ParamBool<px4::params::NPT_FUSE_AGP0>) _param_npt_fuse_agp0,
 		(ParamBool<px4::params::NPT_FUSE_GPS>) _param_npt_fuse_gps,
+		(ParamBool<px4::params::NPT_FC_SD_EN>) _param_npt_fc_sd_en,
 		(ParamFloat<px4::params::NPT_FC_AGP_LATCH>) _param_npt_fc_agp_latch
 	)
 };

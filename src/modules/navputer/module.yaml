@@ -101,6 +101,13 @@ parameters:
       min: 0
       max: 3
 
+    NPT_FC_SD_EN:
+      description:
+        short: Enable GPS anti-spoof
+        long: Give GnssSpoofingDetector control over GPS sensor fusion.
+      type: boolean
+      default: 0
+
     NPT_FC_AGP_LATCH:
       description:
         short: Minimum time to hold aux global position fusion enabled
@@ -127,14 +134,32 @@ parameters:
       type: float
       default: 0.6
       unit: m/s^2
-    NPT_MD_CF_TIME:
+    NPT_MD_MOT_TIME:
       description:
         short: Confirmation time for motion
-        long: Amount of continuous motion time needed to transition from landed stationary to airborne moving
+        long: Amount of continuous motion time needed to transition from LandedStationary to Moving
       type: int32
       default: 300
       min: 0
       max: 10000
+      unit: ms
+    NPT_MD_ST_TIME:
+      description:
+        short: Confirmation time for stationary
+        long: Amount of continuous stationary time needed to transition from Moving to LandedStationary
+      type: int32
+      default: 3000
+      min: 0
+      max: 20000
+      unit: ms
+    NPT_MD_ABM_TIME:
+      description:
+        short: Confirmation time for airborne moving
+        long: Amount of continuous motion time needed to transition from Moving to AirborneMoving
+      type: int32
+      default: 10000
+      min: 0
+      max: 20000
       unit: ms
 
     NPT_SD_AUX_INST:
