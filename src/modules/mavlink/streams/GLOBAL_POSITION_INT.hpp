@@ -124,7 +124,6 @@ private:
 		// Capture the latest valid Navputer NED position as home.
 		if (_home_capture_pending
 			&& _lpos_valid
-			&& _lpos.xy_valid
 			&& _lpos.z_valid)
 		{
 			_home_z = _lpos.z;
@@ -143,8 +142,7 @@ private:
 
 		const navput_local_position_s& lpos = _lpos;
 
-		if (!lpos.xy_valid || !lpos.z_valid
-			|| !lpos.xy_global || !lpos.z_global)
+		if (!lpos.xy_global || !lpos.z_global)
 		{
 			return false;
 		}
