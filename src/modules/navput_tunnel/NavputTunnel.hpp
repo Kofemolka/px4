@@ -53,6 +53,7 @@
 #include <uORB/topics/aux_global_position.h>
 #include <uORB/topics/navput_fusion_control.h>
 #include <uORB/topics/navput_gnss_spoof_detector.h>
+#include <uORB/topics/navput_status_flags.h>
 #include <uORB/topics/ranging_beacon.h>
 #include <uORB/topics/estimator_aid_source2d.h>
 #include <uORB/topics/navput_aid_source2d.h>
@@ -96,6 +97,7 @@ private:
 		PAYLOAD_TYPE_NAVPUT_AID_SOURCE_2D       = 9,
 		PAYLOAD_TYPE_NAVPUT_AID_SOURCE_1D       = 10,
 		PAYLOAD_TYPE_NAVPUT_ATTITUDE            = 11,
+		PAYLOAD_TYPE_NAVPUT_STATUS_FLAGS        = 12,
 	};
 
 	// TUNNEL.payload[0]=frag_total, [1]=frag_index, [2..]=CDR bytes; TUNNEL.payload is 128B.
@@ -129,6 +131,7 @@ private:
 	uORB::SubscriptionInterval _navput_aid_src_aux_global_position_sub{ORB_ID(navput_aid_src_aux_global_position), 200_ms};       // 5 Hz
 	uORB::SubscriptionInterval _navput_aid_src_ranging_beacon_sub{ORB_ID(navput_aid_src_ranging_beacon), 200_ms};                 // 5 Hz
 	uORB::SubscriptionInterval _navput_attitude_sub{ORB_ID(navput_attitude), 100_ms};                         // 10 Hz
+	uORB::SubscriptionInterval _navput_status_flags_sub{ORB_ID(navput_status_flags), 1_s};                      // 1 Hz
 
 	uORB::Publication<mavlink_tunnel_s> _tunnel_out_pub{ORB_ID(mavlink_tunnel_out)};
 };
