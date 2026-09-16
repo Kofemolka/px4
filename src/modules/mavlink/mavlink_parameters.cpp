@@ -306,7 +306,7 @@ MavlinkParametersManager::handle_message(const mavlink_message_t *msg)
 						const int result = send_param(param_find_no_notification(name));
 
 						if (result == 1) {
-							PX4_ERR("Unknown param name: %s", name);
+							// PX4_ERR("Unknown param name: %s", name);
 							send_error(MAV_PARAM_ERROR_DOES_NOT_EXIST, name, -1, msg->sysid, msg->compid);
 
 						} else if (result == 2) {
