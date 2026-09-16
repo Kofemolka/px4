@@ -49,6 +49,7 @@
 #include <px4/msg/NavputAidSource2d.h>
 #include <px4/msg/NavputAidSource1d.h>
 #include <px4/msg/NavputAttitude.h>
+#include <px4/msg/NavputStatusFlags.h>
 
 using namespace time_literals;
 
@@ -240,6 +241,15 @@ void NavputTunnel::Run()
 		if (_navput_attitude_sub.update(&msg)) {
 			serialize_and_publish(PAYLOAD_TYPE_NAVPUT_ATTITUDE, &msg, sizeof(msg),
 					      px4_msgs_msg_NavputAttitude_cdrstream_desc.ops.ops);
+		}
+	}
+
+	{
+		navput_status_flags_s msg;
+
+		if (_navput_status_flags_sub.update(&msg)) {
+			serialize_and_publish(PAYLOAD_TYPE_NAVPUT_STATUS_FLAGS, &msg, sizeof(msg),
+					      px4_msgs_msg_NavputStatusFlags_cdrstream_desc.ops.ops);
 		}
 	}
 }
