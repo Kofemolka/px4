@@ -69,3 +69,7 @@ param set-default CAL_MAG_COMP_TYP 0
 param set-default EKF2_AGP0_ID 111 # MLAT source
 param set-default EKF2_AGP0_CTRL 1 # enable AGP (both EKF instances)
 param set-default EKF2_AGP0_NOISE 250
+
+# Logging
+param set-default SDLOG_BACKEND 3 # SD + Mavlink
+param set-default SDLOG_MODE 2 # from boot until shutdown
