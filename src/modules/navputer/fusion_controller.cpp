@@ -24,6 +24,12 @@ void FusionController::setGpsTrusted(bool trusted)
 	_fc.gps.enabled = _param_npt_fuse_gps.get() && (!_param_npt_fc_sd_en.get() || _gps_trusted);
 }
 
+void FusionController::setRangingBeaconsTrusted(bool trusted)
+{
+	_rngbc_trusted = trusted;
+	_fc.rngbcn.enabled = _param_npt_fuse_rngbc.get() && _rngbc_trusted;
+}
+
 void FusionController::update(Ekf &ekf)
 {
 	if (!_param_npt_fuse_agp0.get()) {

@@ -382,6 +382,7 @@ void Navputer::Run()
 		// push imu data into estimator
 		_ekf.setIMUData(imu_sample_new);
 		_gnss_spoofing_detector.update(_ekf.immediateLatestDeltaVelocity());
+		_rngbc_health_monitor.update();
 
 		UpdateMotionDetector(imu_sample_new);
 
@@ -409,6 +410,7 @@ void Navputer::Run()
 
 		const auto gnss_spoof_report = _gnss_spoofing_detector.report();
 		_fusion_controller.setGpsTrusted(gnss_spoof_report.state == GnssSpoofingState::Trusted);
+		_fusion_controller.setRangingBeaconsTrusted(_rngbc_health_monitor.healthy());
 
 		UpdateGpsSample(ekf2_timestamps, gnss_spoof_report);
 		UpdateBaroSample(ekf2_timestamps);
