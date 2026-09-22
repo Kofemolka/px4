@@ -56,7 +56,7 @@ private:
 	struct Sample
 	{
 		uint8_t id{255};
-		uint64_t time_us{0ULL};
+		uint64_t time_us{0UL};
 	};
 	Sample _recent_bcn_updates[2];
 

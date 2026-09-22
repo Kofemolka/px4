@@ -60,7 +60,7 @@ void RngBcHealthMonitor::updateRecent(const uint64_t time_us, const uint8_t id)
 		return;
 	}
 
-	if (_recent_bcn_updates[0].time_us < _recent_bcn_updates[1].time_us
+	if (_recent_bcn_updates[0].time_us <= _recent_bcn_updates[1].time_us
 		&& _recent_bcn_updates[0].time_us < time_us)
 	{
 		_recent_bcn_updates[0].id = id;
@@ -79,7 +79,7 @@ void RngBcHealthMonitor::update()
 	const uint64_t now = hrt_absolute_time();
 
 	// Initial case. We allow beacon fusion from the start.
-	if (_recent_bcn_updates[0].time_us == 0ULL && _recent_bcn_updates[1].time_us == 0ULL)
+	if (_recent_bcn_updates[0].time_us == 0UL && _recent_bcn_updates[1].time_us == 0UL)
 	{
 		_recent_bcn_updates[0].time_us = now;
 		_recent_bcn_updates[1].time_us = now;
