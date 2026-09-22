@@ -26,8 +26,8 @@ void FusionController::setGpsTrusted(bool trusted)
 
 void FusionController::setRangingBeaconsTrusted(bool trusted)
 {
-	_rngbc_trusted = trusted;
-	_fc.rngbcn.enabled = _param_npt_fuse_rngbc.get() && _rngbc_trusted;
+	_rngbcn_trusted = trusted;
+	_fc.rngbcn.enabled = _param_npt_fuse_rngbc.get() && _rngbcn_trusted;
 }
 
 void FusionController::update(Ekf &ekf)

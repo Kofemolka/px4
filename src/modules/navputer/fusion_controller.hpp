@@ -26,7 +26,7 @@ private:
 	hrt_abstime _agp_last_other_source_missing{0};
 
 	bool _gps_trusted{false};
-	bool _rngbc_trusted{false};
+	bool _rngbcn_trusted{false};
 
 	DEFINE_PARAMETERS(
 		// per-source fusion enable
