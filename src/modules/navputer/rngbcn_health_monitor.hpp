@@ -32,7 +32,7 @@
  ****************************************************************************/
 
 /**
- * @file rngbc_health_monitor.hpp
+ * @file rngbcn_health_monitor.hpp
  * Implementation of the ranging beacons health monitor.
  *
  * @author
@@ -45,7 +45,7 @@
 #include <uORB/topics/ranging_beacon.h>
 #include <uORB/Subscription.hpp>
 
-class RngBcHealthMonitor
+class RngBcnHealthMonitor
 {
 public:
 	void update();

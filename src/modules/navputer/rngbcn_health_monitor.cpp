@@ -32,22 +32,22 @@
  ****************************************************************************/
 
 /**
- * @file rngbc_health_monitor.cpp
+ * @file rngbcn_health_monitor.cpp
  * Implementation of the ranging beacons health monitor.
  *
  * @author
  */
 
-#include "rngbc_health_monitor.hpp"
+#include "rngbcn_health_monitor.hpp"
 
 #include <lib/mathlib/mathlib.h>
 
 namespace
 {
-constexpr uint64_t kFreshnessWindow = 3'000'000;
+constexpr uint64_t kFreshnessWindowUs = 3'000'000;
 } // namespace
 
-void RngBcHealthMonitor::updateRecent(const uint64_t time_us, const uint8_t id)
+void RngBcnHealthMonitor::updateRecent(const uint64_t time_us, const uint8_t id)
 {
 	if (_recent_bcn_updates[0].id == id)
 	{
@@ -74,7 +74,7 @@ void RngBcHealthMonitor::updateRecent(const uint64_t time_us, const uint8_t id)
 	}
 }
 
-void RngBcHealthMonitor::update()
+void RngBcnHealthMonitor::update()
 {
 	const uint64_t now = hrt_absolute_time();
 
@@ -83,11 +83,6 @@ void RngBcHealthMonitor::update()
 	{
 		_recent_bcn_updates[0].time_us = now;
 		_recent_bcn_updates[1].time_us = now;
-		return;
-	}
-
-	if (!_ranging_beacon_sub.updated())
-	{
 		return;
 	}
 
@@ -112,10 +107,10 @@ void RngBcHealthMonitor::update()
 	updateRecent(now, sample.beacon_id);
 }
 
-bool RngBcHealthMonitor::healthy() const
+bool RngBcnHealthMonitor::healthy() const
 {
 	const uint64_t now = hrt_absolute_time();
-	const bool bcn1_fresh = (now - _recent_bcn_updates[0].time_us) < kFreshnessWindow;
-	const bool bcn2_fresh = (now - _recent_bcn_updates[1].time_us) < kFreshnessWindow;
+	const bool bcn1_fresh = (now - _recent_bcn_updates[0].time_us) < kFreshnessWindowUs;
+	const bool bcn2_fresh = (now - _recent_bcn_updates[1].time_us) < kFreshnessWindowUs;
 	return bcn1_fresh && bcn2_fresh;
 }

@@ -100,7 +100,7 @@
 #include "motion_detector.hpp"
 #include "copilot_lifecycle.hpp"
 #include "elevation_initializer.hpp"
-#include "rngbc_health_monitor.hpp"
+#include "rngbcn_health_monitor.hpp"
 #include "gnss_spoofing_detector/gnss_spoofing_detector.hpp"
 
 #include "mlat_aux.hpp"
@@ -258,7 +258,7 @@ private:
 	MotionDetector _motion_detector;
 	CopilotLifecycle _copilot_lifecycle;
 	ElevationInitializer _elevation_initializer;
-	RngBcHealthMonitor _rngbc_health_monitor;
+	RngBcnHealthMonitor _rngbcn_health_monitor;
 	GnssSpoofingDetector _gnss_spoofing_detector;
 
 	parameters *_params;

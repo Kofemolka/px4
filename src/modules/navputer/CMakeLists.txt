@@ -57,8 +57,8 @@ set(NAVPUTER_SRCS
 	fusion_controller.cpp
 	elevation_initializer.hpp
 	elevation_initializer.cpp
-	rngbc_health_monitor.hpp
-	rngbc_health_monitor.cpp
+	rngbcn_health_monitor.hpp
+	rngbcn_health_monitor.cpp
 	gnss_spoofing_detector/gnss_spoofing_detector.hpp
 	gnss_spoofing_detector/gnss_spoofing_detector.cpp
 	gnss_spoofing_detector/gnss_analyzer.hpp
