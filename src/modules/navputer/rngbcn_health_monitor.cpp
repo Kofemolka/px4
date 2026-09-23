@@ -49,47 +49,32 @@ constexpr uint64_t kFreshnessWindowUs = 3'000'000;
 
 void RngBcnHealthMonitor::updateRecent(const uint64_t time_us, const uint8_t id)
 {
-	if (_recent_bcn_updates[0].id == id)
-	{
-		_recent_bcn_updates[0].time_us = time_us;
-		return;
-	}
-	else if (_recent_bcn_updates[1].id == id)
-	{
-		_recent_bcn_updates[1].time_us = time_us;
-		return;
+	size_t oldest_ndx = 0;
+	uint64_t oldest_time_us = _recent_bcn_updates[0].time_us;
+
+	for (size_t i = 0; i < kCacheSize; ++i) {
+		if (_recent_bcn_updates[i].id == id) {
+			_recent_bcn_updates[i].time_us = time_us;
+			return;
+		}
+
+		if (_recent_bcn_updates[i].time_us < oldest_time_us) {
+			oldest_ndx = i;
+			oldest_time_us = _recent_bcn_updates[i].time_us;
+		}
 	}
 
-	if (_recent_bcn_updates[0].time_us <= _recent_bcn_updates[1].time_us
-		&& _recent_bcn_updates[0].time_us < time_us)
-	{
-		_recent_bcn_updates[0].id = id;
-		_recent_bcn_updates[0].time_us = time_us;
-	}
-	else if (_recent_bcn_updates[1].time_us < _recent_bcn_updates[0].time_us
-		&& _recent_bcn_updates[1].time_us < time_us)
-	{
-		_recent_bcn_updates[1].id = id;
-		_recent_bcn_updates[1].time_us = time_us;
-	}
+	_recent_bcn_updates[oldest_ndx].id = id;
+	_recent_bcn_updates[oldest_ndx].time_us = time_us;
 }
 
 void RngBcnHealthMonitor::update()
 {
 	const uint64_t now = hrt_absolute_time();
 
-	// Initial case. We allow beacon fusion from the start.
-	if (_recent_bcn_updates[0].time_us == 0UL && _recent_bcn_updates[1].time_us == 0UL)
-	{
-		_recent_bcn_updates[0].time_us = now;
-		_recent_bcn_updates[1].time_us = now;
-		return;
-	}
-
 	ranging_beacon_s sample;
 
-	if (!_ranging_beacon_sub.update(&sample))
-	{
+	if (!_ranging_beacon_sub.update(&sample)) {
 		return;
 	}
 
@@ -99,8 +84,7 @@ void RngBcnHealthMonitor::update()
 		&& PX4_ISFINITE(sample.lon)
 		&& PX4_ISFINITE(sample.alt);
 
-	if (!measurement_valid)
-	{
+	if (!measurement_valid) {
 		return;
 	}
 
@@ -109,8 +93,11 @@ void RngBcnHealthMonitor::update()
 
 bool RngBcnHealthMonitor::healthy() const
 {
-	const uint64_t now = hrt_absolute_time();
-	const bool bcn1_fresh = (now - _recent_bcn_updates[0].time_us) < kFreshnessWindowUs;
-	const bool bcn2_fresh = (now - _recent_bcn_updates[1].time_us) < kFreshnessWindowUs;
-	return bcn1_fresh && bcn2_fresh;
+	for (const auto& sample : _recent_bcn_updates) {
+		if (hrt_elapsed_time(&sample.time_us) >= kFreshnessWindowUs) {
+			return false;
+		}
+	}
+
+	return true;
 }

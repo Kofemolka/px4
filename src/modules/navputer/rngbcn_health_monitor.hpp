@@ -38,8 +38,8 @@
  * @author
  */
 
-#ifndef RNGBC_HEALTH_MONITOR
-#define RNGBC_HEALTH_MONITOR
+#ifndef RNGBCN_HEALTH_MONITOR
+#define RNGBCN_HEALTH_MONITOR
 
 #include <drivers/drv_hrt.h>
 #include <uORB/topics/ranging_beacon.h>
@@ -50,18 +50,21 @@ class RngBcnHealthMonitor
 public:
 	void update();
 	bool healthy() const;
+
 private:
 	void updateRecent(const uint64_t time_us, const uint8_t id);
-private:
+
 	struct Sample
 	{
 		uint8_t id{255};
 		uint64_t time_us{0UL};
 	};
-	Sample _recent_bcn_updates[2];
+
+	static constexpr size_t kCacheSize = 2;
+	Sample _recent_bcn_updates[kCacheSize];
 
 	// Beacons
 	uORB::Subscription _ranging_beacon_sub {ORB_ID(ranging_beacon)};
 };
 
-#endif // !RNGBC_HEALTH_MONITOR
+#endif // !RNGBCN_HEALTH_MONITOR
