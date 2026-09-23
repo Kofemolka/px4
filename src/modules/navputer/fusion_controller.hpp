@@ -12,6 +12,7 @@ public:
 
 	void update(Ekf& _ekf);
 	void setGpsTrusted(bool trusted);
+	void setRangingBeaconsTrusted(bool trusted);
 
 protected:
 	virtual void updateParams() override;
@@ -23,7 +24,9 @@ private:
 
 	hrt_abstime _agp_last_origin_missing{0};
 	hrt_abstime _agp_last_other_source_missing{0};
+
 	bool _gps_trusted{false};
+	bool _rngbcn_trusted{false};
 
 	DEFINE_PARAMETERS(
 		// per-source fusion enable
