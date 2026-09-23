@@ -898,9 +898,9 @@ void Navputer::UpdateGpsSample(ekf2_timestamps_s &ekf2_timestamps, const SpoofRe
 			.lon = vehicle_gps_position.longitude_deg,
 			.alt = altitude_amsl,
 			.vel = vel_ned,
-			.hacc = vehicle_gps_position.eph * report.pos_stddev_mult,
+			.hacc = vehicle_gps_position.eph, // TODO: * report.pos_stddev_mult,
 			.vacc = vehicle_gps_position.epv,
-			.sacc = vehicle_gps_position.s_variance_m_s * report.vel_stddev_mult,
+			.sacc = vehicle_gps_position.s_variance_m_s, // TODO: * report.vel_stddev_mult,
 			.fix_type = vehicle_gps_position.fix_type,
 			.nsats = vehicle_gps_position.satellites_used,
 			.pdop = sqrtf(vehicle_gps_position.hdop *vehicle_gps_position.hdop
