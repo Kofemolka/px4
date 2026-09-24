@@ -193,6 +193,21 @@ public:
 		FLOW_CONTROL_ON
 	};
 
+	enum class NAVPUTER_OUTPUT : uint32_t {
+		GLOBAL_POSITION_INT     = 1u << 0,
+		GLOBAL_POSITION_INT_COV = 1u << 1,
+		LOCAL_POSITION_NED      = 1u << 2,
+		GPS_RAW_INT             = 1u << 3,
+		GPS_INPUT               = 1u << 4,
+		ODOMETRY                = 1u << 5,
+		GLOBAL_POSITION_SENSOR  = 1u << 6
+	};
+
+	bool isNavputerOutputEnabled(NAVPUTER_OUTPUT out_type) const
+	{
+		return (static_cast<uint32_t>(_param_mav_npt_out.get()) & static_cast<uint32_t>(out_type)) != 0;
+	}
+
 	static const char *mavlink_mode_str(enum MAVLINK_MODE mode)
 	{
 		switch (mode) {
@@ -671,7 +686,8 @@ private:
 		(ParamBool<px4::params::MAV_HASH_CHK_EN>) _param_mav_hash_chk_en,
 		(ParamBool<px4::params::MAV_HB_FORW_EN>) _param_mav_hb_forw_en,
 		(ParamInt<px4::params::MAV_RADIO_TOUT>)      _param_mav_radio_timeout,
-		(ParamInt<px4::params::SYS_HITL>) _param_sys_hitl
+		(ParamInt<px4::params::SYS_HITL>) _param_sys_hitl,
+		(ParamInt<px4::params::MAV_NPT_OUT>) _param_mav_npt_out
 #if defined(CONFIG_MODULES_FAILURE_INJECTION_MANAGER)
 		, (ParamBool<px4::params::SYS_FAILURE_EN>) _param_sys_failure_injection_enabled
 #endif // CONFIG_MODULES_FAILURE_INJECTION_MANAGER

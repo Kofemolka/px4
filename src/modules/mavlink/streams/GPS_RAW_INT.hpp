@@ -50,10 +50,17 @@ public:
 	const char *get_name() const override { return get_name_static(); }
 	uint16_t get_id() override { return get_id_static(); }
 
+#ifdef CONFIG_MAVLINK_SOURCE_NAVPUTER
+	unsigned get_size() override
+	{
+		return _lpos_sub.advertised() ? MAVLINK_MSG_ID_GLOBAL_POSITION_INT_LEN + MAVLINK_NUM_NON_PAYLOAD_BYTES : 0;
+	}
+#else //CONFIG_MAVLINK_SOURCE_NAVPUTER
 	unsigned get_size() override
 	{
 		return _sensor_gps_sub.advertised() ? (MAVLINK_MSG_ID_GPS_RAW_INT_LEN + MAVLINK_NUM_NON_PAYLOAD_BYTES) : 0;
 	}
+#endif //CONFIG_MAVLINK_SOURCE_NAVPUTER
 
 private:
 	explicit MavlinkStreamGPSRawInt(Mavlink *mavlink) : MavlinkStream(mavlink) {}
@@ -64,6 +71,124 @@ private:
 	static constexpr hrt_abstime kNoGpsSendInterval {1_s};
 
 	bool send() override
+	{
+		return sendImpl();
+	}
+
+#ifdef CONFIG_MAVLINK_SOURCE_NAVPUTER
+	uORB::Subscription _lpos_sub{ORB_ID(navput_local_position)};
+	uORB::Subscription _status_sub{ORB_ID(navput_vehicle_status)};
+
+	navput_local_position_s _lpos{};
+	bool _lpos_valid{false};
+
+	MapProjection _projection{};
+	bool _projection_initialized{false};
+
+	bool _was_armed{false};
+	bool _home_capture_pending{false};
+	bool _home_valid{false};
+
+	float _home_z{NAN};
+
+	void update_data() override
+	{
+		navput_local_position_s lpos{};
+
+		if (_lpos_sub.update(&lpos))
+		{
+			_lpos = lpos;
+			_lpos_valid = true;
+		}
+
+		// Shows Navputer's ARMED/UNARMED states
+		vehicle_status_s status{};
+
+		if (_status_sub.update(&status))
+		{
+			const bool armed = status.arming_state == vehicle_status_s::ARMING_STATE_ARMED;
+
+			if (armed && !_was_armed)
+			{
+				_home_valid = false;
+				_home_capture_pending = true;
+			}
+			else if (!armed)
+			{
+				_home_valid = false;
+				_home_capture_pending = false;
+			}
+			_was_armed = armed;
+		}
+
+		// Capture the latest valid Navputer NED position as home.
+		if (_home_capture_pending
+			&& _lpos_valid
+			&& _lpos.z_valid)
+		{
+			_home_z = _lpos.z;
+
+			_home_valid = true;
+			_home_capture_pending = false;
+		}
+	}
+
+	bool sendImpl()
+	{
+		if (!_mavlink->isNavputerOutputEnabled(NAVPUTER_OUTPUT::GLOBAL_POSITION_INT) || !_lpos_valid)
+		{
+			return false;
+		}
+
+		const navput_local_position_s& lpos = _lpos;
+
+		if (!lpos.xy_global || !lpos.z_global)
+		{
+			return false;
+		}
+
+		if (!_projection_initialized
+			|| _projection.getProjectionReferenceTimestamp() != lpos.ref_timestamp)
+		{
+			_projection.initReference(
+				lpos.ref_lat,
+				lpos.ref_lon,
+				lpos.ref_timestamp);
+			_projection_initialized = true;
+		}
+
+		double lat_deg;
+		double lon_deg;
+		_projection.reproject(lpos.x, lpos.y, lat_deg, lon_deg);
+
+		mavlink_gps_raw_int_t msg{};
+
+		const float alt_amsl_m = lpos.ref_alt - lpos.z;
+
+		if (_home_valid)
+		{
+			msg.relative_alt = static_cast<int32_t>((_home_z - lpos.z) * 1000.f);
+		}
+		else
+		{
+			msg.relative_alt = 0;
+		}
+
+		msg.time_boot_ms = lpos.timestamp / 1000;
+		msg.lat = static_cast<int32_t>(lat_deg * 1e7);
+		msg.lon = static_cast<int32_t>(lon_deg * 1e7);
+		msg.alt = static_cast<int32_t>(alt_amsl_m * 1000.f);
+
+		const Vector3f velocity{lpos.vx, lpos.vy, lpos.vz};
+		msg.vel = velocity.norm();
+		msg.cog = static_cast<uint16_t>(math::degrees(matrix::wrap_2pi(lpos.heading)) * 100.f);
+
+		mavlink_msg_gps_raw_int_send_struct(_mavlink->get_channel(), &msg);
+
+		return true;
+	}
+#else //CONFIG_MAVLINK_SOURCE_NAVPUTER
+	bool sendImpl() override
 	{
 		const uint8_t primary = _gps_selector.primary_instance();
 
@@ -138,6 +263,7 @@ private:
 
 		return false;
 	}
+#endif //CONFIG_MAVLINK_SOURCE_NAVPUTER
 };
 
 #endif // GPS_RAW_INT_HPP

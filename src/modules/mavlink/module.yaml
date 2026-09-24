@@ -238,3 +238,19 @@ parameters:
             type: boolean
             reboot_required: true
             default: false
+
+        MAV_NPT_OUT:
+          description:
+            short: Navputer MAVLink output messages
+          type: bitmask
+          bit:
+            0: GLOBAL_POSITION_INT
+            1: GLOBAL_POSITION_INT_COV
+            2: LOCAL_POSITION_NED
+            3: GPS_RAW_INT
+            4: GPS_INPUT
+            5: ODOMETRY
+            6: GLOBAL_POSITION_SENSOR
+          default: 0
+          min: 0
+          max: 127

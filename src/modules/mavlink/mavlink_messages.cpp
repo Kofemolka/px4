@@ -80,6 +80,9 @@
 #include "streams/FLIGHT_INFORMATION.hpp"
 #include "streams/GLOBAL_POSITION_SENSOR.hpp"
 #include "streams/GLOBAL_POSITION_INT.hpp"
+#ifdef CONFIG_MAVLINK_SOURCE_NAVPUTER
+#include "streams/GLOBAL_POSITION_INT_COV.hpp"
+#endif
 #if defined(MAVLINK_MSG_ID_GNSS_INTEGRITY)
 #include "streams/GNSS_INTEGRITY.hpp"
 #endif
@@ -327,6 +330,9 @@ static const StreamListItem streams_list[] = {
 #if defined(GLOBAL_POSITION_INT_HPP)
 	create_stream_list_item<MavlinkStreamGlobalPositionInt>(),
 #endif // GLOBAL_POSITION_INT_HPP
+#if defined(GLOBAL_POSITION_INT_COV_HPP)
+	create_stream_list_item<MavlinkStreamGlobalPositionIntCov>(),
+#endif // GLOBAL_POSITION_INT_COV_HPP
 #if defined(LANDING_TARGET_HPP)
 	create_stream_list_item<MavlinkStreamLandingTarget>(),
 #endif

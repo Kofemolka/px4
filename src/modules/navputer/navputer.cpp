@@ -76,7 +76,8 @@ Navputer::Navputer(const px4::wq_config_t &config, bool replay_mode):
 	_param_ekf2_req_vdrift(_params->ekf2_req_vdrift),
 	_param_ekf2_req_fix(_params->ekf2_req_fix),
 	_param_ekf2_gsf_tas(_params->ekf2_gsf_tas),
-	_param_npt_sd_aux_instance_mask{}
+	_param_npt_sd_aux_instance_mask{},
+	_param_npt_noaid_timeout(_params->ekf2_noaid_tout)
 {
 	UpdateGnssParameters();
 	AdvertiseTopics();

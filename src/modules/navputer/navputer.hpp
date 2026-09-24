@@ -291,7 +291,8 @@ private:
 		(ParamFloat<px4::params::EKF2_REQ_GPS_H>)      _param_ekf2_req_gps_h,
 		(ParamExtFloat<px4::params::EKF2_GSF_TAS>)     _param_ekf2_gsf_tas,
 		(ParamFloat<px4::params::EKF2_GPS_YAW_OFF>)    _param_ekf2_gps_yaw_off,
-		(ParamInt<px4::params::NPT_SD_AUX_INST>)       _param_npt_sd_aux_instance_mask
+		(ParamInt<px4::params::NPT_SD_AUX_INST>)       _param_npt_sd_aux_instance_mask,
+		(ParamExtInt<px4::params::NPT_NOAID_TOUT>)     _param_npt_noaid_timeout
 	)
 };
 #endif // !NAVPUTER_HPP

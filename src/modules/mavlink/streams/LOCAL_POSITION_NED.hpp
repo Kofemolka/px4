@@ -69,6 +69,11 @@ private:
 
 	bool sendImpl()
 	{
+		if (!_mavlink->isNavputerOutputEnabled(NAVPUTER_OUTPUT::LOCAL_POSITION_NED))
+		{
+			return false;
+		}
+
 		navput_local_position_s lpos;
 
 		if (_lpos_sub.update(&lpos)) {

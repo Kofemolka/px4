@@ -175,3 +175,15 @@ parameters:
       default: 1
       min: 0
       max: 15
+
+    NPT_NOAID_TOUT:
+      description:
+        short: Maximum inertial dead-reckoning time
+        long: Maximum lapsed time from last fusion of measurements that constrain
+          velocity drift before the EKF will report the horizontal nav solution as
+          invalid
+      type: int32
+      default: 5000000
+      min: 500000
+      max: 10000000
+      unit: us
