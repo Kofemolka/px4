@@ -40,14 +40,12 @@
 
 #include "rngbcn_health_monitor.hpp"
 
-#include <lib/mathlib/mathlib.h>
-
 namespace
 {
 constexpr uint64_t kFreshnessWindowUs = 3'000'000;
 } // namespace
 
-void RngBcnHealthMonitor::updateRecent(const uint64_t time_us, const uint8_t id)
+void RngBcnHealthMonitor::updateRecent(const uint64_t time_us, const uint32_t id)
 {
 	size_t oldest_ndx = 0;
 	uint64_t oldest_time_us = _recent_bcn_updates[0].time_us;
@@ -72,23 +70,17 @@ void RngBcnHealthMonitor::update()
 {
 	const uint64_t now = hrt_absolute_time();
 
-	ranging_beacon_s sample;
+	navput_aid_source1d_s sample;
 
-	if (!_ranging_beacon_sub.update(&sample)) {
+	if (!_aid_src_ranging_beacon_sub.update(&sample)) {
 		return;
 	}
 
-	const bool measurement_valid =
-		PX4_ISFINITE(sample.range)
-		&& PX4_ISFINITE(sample.lat)
-		&& PX4_ISFINITE(sample.lon)
-		&& PX4_ISFINITE(sample.alt);
-
-	if (!measurement_valid) {
+	if (!sample.fused) {
 		return;
 	}
 
-	updateRecent(now, sample.beacon_id);
+	updateRecent(now, sample.device_id);
 }
 
 bool RngBcnHealthMonitor::healthy() const
