@@ -1,5 +1,4 @@
 #include "fusion_controller.hpp"
-#include "mathlib/math/Functions.hpp"
 
 using namespace time_literals;
 
