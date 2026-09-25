@@ -1,4 +1,5 @@
 #include "fusion_controller.hpp"
+#include "mathlib/math/Functions.hpp"
 
 using namespace time_literals;
 
@@ -27,7 +28,14 @@ void FusionController::setGpsTrusted(bool trusted)
 void FusionController::setRangingBeaconsTrusted(bool trusted)
 {
 	_rngbcn_trusted = trusted;
-	_fc.rngbcn.enabled = _param_npt_fuse_rngbc.get() && _rngbcn_trusted;
+}
+
+bool onlyRangeBeaconsContributeToHorizontalPosition(Ekf &ekf)
+{
+	const auto& cs = ekf.control_status_flags();
+	return !cs.gnss_pos
+	       && !cs.ev_pos
+	       && cs.rngbcn_fusion;
 }
 
 void FusionController::update(Ekf &ekf)
@@ -50,10 +58,12 @@ void FusionController::update(Ekf &ekf)
 		_agp_last_other_source_missing = now;
 	}
 
+	const bool only_rngbcn_fused = onlyRangeBeaconsContributeToHorizontalPosition(ekf);
+
 	const bool origin_latched = hrt_elapsed_time(&_agp_last_origin_missing) < latch_time;
 	const bool other_source_latched = hrt_elapsed_time(&_agp_last_other_source_missing) < latch_time;
 
-	const bool agp_enabled = origin_latched || other_source_latched;
+	const bool agp_enabled = origin_latched || other_source_latched || (only_rngbcn_fused && !_rngbcn_trusted);
 
 	if (agp_enabled != _fc.agp[0].enabled) {
 		PX4_INFO("AGP fusion %s", agp_enabled ? "enabled" : "disabled");
