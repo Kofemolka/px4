@@ -966,8 +966,16 @@ private:
 #endif // CONFIG_EKF2_GNSS
 
 #if defined(CONFIG_EKF2_RANGING_BEACON)
+	struct RangingBeaconEvaluation {
+		float innovation = 0;
+		float innovation_variance = 0;
+		float observation_variance = 0;
+		VectorState H;
+	};
+
 	void controlRangingBeaconFusion(const imuSample &imu_delayed);
-	void fuseRangingBeacon(const rangingBeaconSample &sample);
+	RangingBeaconEvaluation evaluateRangingBeacon(const rangingBeaconSample &sample);
+	void fuseRangingBeacon(const RangingBeaconEvaluation& rngbcn_evaluation);
 	void stopRangingBeaconFusion();
 #endif // CONFIG_EKF2_RANGING_BEACON
 

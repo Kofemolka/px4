@@ -44,7 +44,7 @@ void Ekf::controlRangingBeaconFusion(const imuSample &imu_delayed)
 {
 	_fc.rngbcn.available = (_params.ekf2_rngbc_ctrl != 0);
 
-	if (!_ranging_beacon_buffer || !_fc.rngbcn.intended()) {
+	if (!_ranging_beacon_buffer) {
 		stopRangingBeaconFusion();
 		return;
 	}
@@ -64,10 +64,19 @@ void Ekf::controlRangingBeaconFusion(const imuSample &imu_delayed)
 					       && PX4_ISFINITE(sample.beacon_lon)
 					       && PX4_ISFINITE(sample.beacon_alt);
 
-		if (measurement_valid && _local_origin_lat_lon.isInitialized() && PX4_ISFINITE(_local_origin_alt)) {
-			fuseRangingBeacon(sample);
-		}
 
+		if (measurement_valid && _local_origin_lat_lon.isInitialized() && PX4_ISFINITE(_local_origin_alt)) {
+			RangingBeaconEvaluation rngbcn_evaluation = evaluateRangingBeacon(sample);
+
+			if (_fc.rngbcn.intended()) {
+				fuseRangingBeacon(rngbcn_evaluation);
+			}
+		}
+	}
+
+	if (!_fc.rngbcn.intended()) {
+		stopRangingBeaconFusion();
+		return;
 	}
 
 	if (_control_status.flags.rngbcn_fusion
@@ -76,7 +85,7 @@ void Ekf::controlRangingBeaconFusion(const imuSample &imu_delayed)
 	}
 }
 
-void Ekf::fuseRangingBeacon(const rangingBeaconSample &sample)
+Ekf::RangingBeaconEvaluation Ekf::evaluateRangingBeacon(const rangingBeaconSample &sample)
 {
 	const matrix::Vector3d vehicle_ecef = _gpos.toEcef();
 
@@ -86,8 +95,10 @@ void Ekf::fuseRangingBeacon(const rangingBeaconSample &sample)
 	const matrix::Vector3d delta_ecef = beacon_ecef - vehicle_ecef;
 	const double predicted_range = delta_ecef.norm();
 
-	const float innovation = static_cast<float>(predicted_range) - sample.range_m;
-	const float R = fmaxf(sample.range_var, sq(_params.ekf2_rngbc_noise));
+	RangingBeaconEvaluation rngbcn_evaluation;
+
+	rngbcn_evaluation.innovation = static_cast<float>(predicted_range) - sample.range_m;
+	rngbcn_evaluation.observation_variance = fmaxf(sample.range_var, sq(_params.ekf2_rngbc_noise));
 
 	// Compute beacon position for the symforce H matrix.
 	// _state.pos(0:1) is always 0 in the global-position EKF, so N,E are relative.
@@ -98,28 +109,31 @@ void Ekf::fuseRangingBeacon(const rangingBeaconSample &sample)
 				    static_cast<float>(delta_ecef(2)));
 	const Vector3f delta_ned = R_ecef_to_ned * delta_ecef_f;
 	const Vector3f beacon_pos(delta_ned(0), delta_ned(1), _state.pos(2) + delta_ned(2));
-	float innov_var;
-	VectorState H;
 
-	sym::ComputeRangeBeaconInnovVarAndH(_state.vector(), P, beacon_pos, R, FLT_EPSILON, &innov_var, &H);
+	sym::ComputeRangeBeaconInnovVarAndH(_state.vector(), P, beacon_pos, rngbcn_evaluation.observation_variance, FLT_EPSILON, &rngbcn_evaluation.innovation_variance, &rngbcn_evaluation.H);
 
 	updateAidSourceStatus(_aid_src_ranging_beacon,
 			      sample.time_us,
 			      sample.range_m,
-			      R,
-			      innovation,
-			      innov_var,
+			      rngbcn_evaluation.observation_variance,
+			      rngbcn_evaluation.innovation,
+			      rngbcn_evaluation.innovation_variance,
 			      _params.ekf2_rngbc_gate);
 
 	_aid_src_ranging_beacon.device_id = sample.beacon_id;
 
+	return rngbcn_evaluation;
+}
+
+void Ekf::fuseRangingBeacon(const RangingBeaconEvaluation& rngbcn_evaluation)
+{
 	if (_aid_src_ranging_beacon.innovation_rejected) {
 		return;
 	}
 
-	VectorState K = P * H / innov_var;
+	VectorState K = P * rngbcn_evaluation.H / rngbcn_evaluation.innovation_variance;
 	K(State::pos.idx + 2) = 0.f; // altitude is handled by height reference
-	measurementUpdate(K, H, R, innovation);
+	measurementUpdate(K, rngbcn_evaluation.H, rngbcn_evaluation.observation_variance, rngbcn_evaluation.innovation);
 
 	_aid_src_ranging_beacon.fused = true;
 	_aid_src_ranging_beacon.time_last_fuse = _time_delayed_us;

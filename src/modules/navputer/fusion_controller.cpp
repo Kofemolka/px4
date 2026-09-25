@@ -26,6 +26,10 @@ void FusionController::setGpsTrusted(bool trusted)
 
 void FusionController::setRangingBeaconsTrusted(bool trusted)
 {
+	if (_rngbcn_trusted != trusted)
+	{
+		PX4_INFO("setRangingBeaconsTrusted %d -> %d", (int)_rngbcn_trusted, (int)trusted);
+	}
 	_rngbcn_trusted = trusted;
 	_fc.rngbcn.enabled = _param_npt_fuse_rngbc.get() && _rngbcn_trusted;
 }
