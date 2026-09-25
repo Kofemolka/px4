@@ -115,7 +115,7 @@ private:
 
 	bool send() override
 	{
-		if (!_mavlink->isNavputerOutputEnabled(NAVPUTER_OUTPUT::GLOBAL_POSITION_INT_COV) || !_lpos_valid)
+		if (!_mavlink->isNavputerOutputEnabled(Mavlink::NAVPUTER_OUTPUT::GLOBAL_POSITION_INT_COV) || !_lpos_valid)
 		{
 			return false;
 		}
@@ -183,8 +183,8 @@ private:
 		}
 
 		// EPH and EVH are 2D errors. Approximate them as equal, uncorrelated N/E errors.
-		const double pos_horizontal_variance = static_cast<double>(lpos.eph) * lpos.eph * 0.5;
-		const double vel_horizontal_variance = static_cast<double>(lpos.evh) * lpos.evh * 0.5;
+		const double pos_horizontal_variance = static_cast<double>(lpos.eph) * static_cast<double>(lpos.eph) * 0.5;
+		const double vel_horizontal_variance = static_cast<double>(lpos.evh) * static_cast<double>(lpos.evh) * 0.5;
 		const double radians_to_degrees = 180.0 / M_PI;
 		const double lat_degrees_per_meter = radians_to_degrees / CONSTANTS_RADIUS_OF_EARTH;
 		const double lon_degrees_per_meter = lat_degrees_per_meter / cos_lat;
@@ -192,10 +192,10 @@ private:
 		// State order: latitude, longitude, altitude, vx, vy, vz.
 		msg.covariance[0] = pos_horizontal_variance * lat_degrees_per_meter * lat_degrees_per_meter;
 		msg.covariance[7] = pos_horizontal_variance * lon_degrees_per_meter * lon_degrees_per_meter;
-		msg.covariance[14] = static_cast<double>(lpos.epv) * lpos.epv;
+		msg.covariance[14] = static_cast<double>(lpos.epv) * static_cast<double>(lpos.epv);
 		msg.covariance[21] = vel_horizontal_variance;
 		msg.covariance[28] = vel_horizontal_variance;
-		msg.covariance[35] = static_cast<double>(lpos.evv) * lpos.evv;
+		msg.covariance[35] = static_cast<double>(lpos.evv) * static_cast<double>(lpos.evv);
 	}
 };
 

@@ -135,7 +135,7 @@ private:
 
 	bool sendImpl()
 	{
-		if (!_mavlink->isNavputerOutputEnabled(NAVPUTER_OUTPUT::GLOBAL_POSITION_INT) || !_lpos_valid)
+		if (!_mavlink->isNavputerOutputEnabled(Mavlink::NAVPUTER_OUTPUT::GLOBAL_POSITION_INT) || !_lpos_valid)
 		{
 			return false;
 		}

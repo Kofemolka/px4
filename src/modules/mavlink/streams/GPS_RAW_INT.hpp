@@ -37,6 +37,11 @@
 #include <lib/gnss/SensorGpsSelector.hpp>
 #include <uORB/topics/sensor_gps.h>
 
+#ifdef CONFIG_MAVLINK_SOURCE_NAVPUTER
+#include <lib/geo/geo.h>
+#include <uORB/topics/navput_local_position.h>
+#endif
+
 using namespace time_literals;
 
 class MavlinkStreamGPSRawInt : public MavlinkStream
@@ -53,7 +58,7 @@ public:
 #ifdef CONFIG_MAVLINK_SOURCE_NAVPUTER
 	unsigned get_size() override
 	{
-		return _lpos_sub.advertised() ? MAVLINK_MSG_ID_GLOBAL_POSITION_INT_LEN + MAVLINK_NUM_NON_PAYLOAD_BYTES : 0;
+		return _lpos_sub.advertised() ? MAVLINK_MSG_ID_GPS_RAW_INT_LEN + MAVLINK_NUM_NON_PAYLOAD_BYTES : 0;
 	}
 #else //CONFIG_MAVLINK_SOURCE_NAVPUTER
 	unsigned get_size() override
@@ -77,7 +82,6 @@ private:
 
 #ifdef CONFIG_MAVLINK_SOURCE_NAVPUTER
 	uORB::Subscription _lpos_sub{ORB_ID(navput_local_position)};
-	uORB::Subscription _status_sub{ORB_ID(navput_vehicle_status)};
 
 	navput_local_position_s _lpos{};
 	bool _lpos_valid{false};
@@ -85,75 +89,50 @@ private:
 	MapProjection _projection{};
 	bool _projection_initialized{false};
 
-	bool _was_armed{false};
-	bool _home_capture_pending{false};
-	bool _home_valid{false};
-
-	float _home_z{NAN};
-
 	void update_data() override
 	{
 		navput_local_position_s lpos{};
 
-		if (_lpos_sub.update(&lpos))
-		{
+		if (_lpos_sub.update(&lpos)) {
 			_lpos = lpos;
 			_lpos_valid = true;
-		}
-
-		// Shows Navputer's ARMED/UNARMED states
-		vehicle_status_s status{};
-
-		if (_status_sub.update(&status))
-		{
-			const bool armed = status.arming_state == vehicle_status_s::ARMING_STATE_ARMED;
-
-			if (armed && !_was_armed)
-			{
-				_home_valid = false;
-				_home_capture_pending = true;
-			}
-			else if (!armed)
-			{
-				_home_valid = false;
-				_home_capture_pending = false;
-			}
-			_was_armed = armed;
-		}
-
-		// Capture the latest valid Navputer NED position as home.
-		if (_home_capture_pending
-			&& _lpos_valid
-			&& _lpos.z_valid)
-		{
-			_home_z = _lpos.z;
-
-			_home_valid = true;
-			_home_capture_pending = false;
 		}
 	}
 
 	bool sendImpl()
 	{
-		if (!_mavlink->isNavputerOutputEnabled(NAVPUTER_OUTPUT::GLOBAL_POSITION_INT) || !_lpos_valid)
-		{
+		if (!_mavlink->isNavputerOutputEnabled(Mavlink::NAVPUTER_OUTPUT::GPS_RAW_INT) || !_lpos_valid) {
 			return false;
 		}
 
-		const navput_local_position_s& lpos = _lpos;
+		const navput_local_position_s &lpos = _lpos;
 
-		if (!lpos.xy_global || !lpos.z_global)
-		{
+		if (!lpos.xy_global || !lpos.z_global || !lpos.xy_valid || !lpos.z_valid) {
+			const hrt_abstime now = hrt_absolute_time();
+
+			if ((_last_send_ts == 0) || (now > _last_send_ts + kNoGpsSendInterval)) {
+				mavlink_gps_raw_int_t msg{};
+				msg.time_usec = now;
+				msg.fix_type = GPS_FIX_TYPE_NO_FIX;
+				msg.eph = UINT16_MAX;
+				msg.epv = UINT16_MAX;
+				msg.vel = UINT16_MAX;
+				msg.cog = UINT16_MAX;
+				msg.satellites_visible = UINT8_MAX;
+				msg.h_acc = UINT32_MAX;
+				msg.v_acc = UINT32_MAX;
+				msg.vel_acc = UINT32_MAX;
+				msg.hdg_acc = UINT32_MAX;
+				mavlink_msg_gps_raw_int_send_struct(_mavlink->get_channel(), &msg);
+				_last_send_ts = now;
+				return true;
+			}
+
 			return false;
 		}
 
-		if (!_projection_initialized
-			|| _projection.getProjectionReferenceTimestamp() != lpos.ref_timestamp)
-		{
-			_projection.initReference(
-				lpos.ref_lat,
-				lpos.ref_lon,
-				lpos.ref_timestamp);
+		if (!_projection_initialized || _projection.getProjectionReferenceTimestamp() != lpos.ref_timestamp) {
+			_projection.initReference(lpos.ref_lat, lpos.ref_lon, lpos.ref_timestamp);
 			_projection_initialized = true;
 		}
 
@@ -162,33 +141,61 @@ private:
 		_projection.reproject(lpos.x, lpos.y, lat_deg, lon_deg);
 
 		mavlink_gps_raw_int_t msg{};
+		msg.time_usec = lpos.timestamp;
+		msg.fix_type = GPS_FIX_TYPE_3D_FIX;
+		msg.lat = static_cast<int32_t>(round(lat_deg * 1e7));
+		msg.lon = static_cast<int32_t>(round(lon_deg * 1e7));
+		msg.alt = static_cast<int32_t>(round((lpos.ref_alt - lpos.z) * 1e3f));
+		msg.eph = UINT16_MAX; // Navputer has EPH, not GNSS HDOP.
+		msg.epv = UINT16_MAX; // Navputer has EPV, not GNSS VDOP.
+		msg.satellites_visible = UINT8_MAX;
+		msg.h_acc = UINT32_MAX;
+		msg.v_acc = UINT32_MAX;
+		msg.vel_acc = UINT32_MAX;
+		msg.hdg_acc = UINT32_MAX;
 
-		const float alt_amsl_m = lpos.ref_alt - lpos.z;
+		if (lpos.v_xy_valid && PX4_ISFINITE(lpos.vx) && PX4_ISFINITE(lpos.vy)) {
+			const float groundspeed = sqrtf(lpos.vx * lpos.vx + lpos.vy * lpos.vy);
+			msg.vel = static_cast<uint16_t>(math::min(groundspeed * 100.f, static_cast<float>(UINT16_MAX)));
 
-		if (_home_valid)
-		{
-			msg.relative_alt = static_cast<int32_t>((_home_z - lpos.z) * 1000.f);
+			if (groundspeed > FLT_EPSILON) {
+				msg.cog = static_cast<uint16_t>(math::degrees(matrix::wrap_2pi(atan2f(lpos.vy, lpos.vx))) * 100.f);
+			} else {
+				msg.cog = UINT16_MAX;
+			}
+
+			if (PX4_ISFINITE(lpos.evh) && lpos.evh >= 0.f) {
+				msg.vel_acc = static_cast<uint32_t>(math::min(lpos.evh * 1e3f, static_cast<float>(UINT32_MAX)));
+			}
+
+		} else {
+			msg.vel = UINT16_MAX;
+			msg.cog = UINT16_MAX;
 		}
-		else
-		{
-			msg.relative_alt = 0;
+
+		if (PX4_ISFINITE(lpos.eph) && lpos.eph >= 0.f) {
+			msg.h_acc = static_cast<uint32_t>(math::min(lpos.eph * 1e3f, static_cast<float>(UINT32_MAX)));
 		}
 
-		msg.time_boot_ms = lpos.timestamp / 1000;
-		msg.lat = static_cast<int32_t>(lat_deg * 1e7);
-		msg.lon = static_cast<int32_t>(lon_deg * 1e7);
-		msg.alt = static_cast<int32_t>(alt_amsl_m * 1000.f);
+		if (PX4_ISFINITE(lpos.epv) && lpos.epv >= 0.f) {
+			msg.v_acc = static_cast<uint32_t>(math::min(lpos.epv * 1e3f, static_cast<float>(UINT32_MAX)));
+		}
 
-		const Vector3f velocity{lpos.vx, lpos.vy, lpos.vz};
-		msg.vel = velocity.norm();
-		msg.cog = static_cast<uint16_t>(math::degrees(matrix::wrap_2pi(lpos.heading)) * 100.f);
+		if (lpos.heading_good_for_control && PX4_ISFINITE(lpos.heading)) {
+			msg.yaw = static_cast<uint16_t>(math::degrees(matrix::wrap_2pi(lpos.heading)) * 100.f);
+
+			if (PX4_ISFINITE(lpos.heading_var) && lpos.heading_var >= 0.f) {
+				msg.hdg_acc = static_cast<uint32_t>(math::min(math::degrees(sqrtf(lpos.heading_var)) * 1e5f,
+											 static_cast<float>(UINT32_MAX)));
+			}
+		}
 
 		mavlink_msg_gps_raw_int_send_struct(_mavlink->get_channel(), &msg);
-
+		_last_send_ts = hrt_absolute_time();
 		return true;
 	}
 #else //CONFIG_MAVLINK_SOURCE_NAVPUTER
-	bool sendImpl() override
+	bool sendImpl()
 	{
 		const uint8_t primary = _gps_selector.primary_instance();
 

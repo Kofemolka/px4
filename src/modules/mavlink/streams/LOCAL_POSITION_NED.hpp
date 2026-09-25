@@ -69,7 +69,7 @@ private:
 
 	bool sendImpl()
 	{
-		if (!_mavlink->isNavputerOutputEnabled(NAVPUTER_OUTPUT::LOCAL_POSITION_NED))
+		if (!_mavlink->isNavputerOutputEnabled(Mavlink::NAVPUTER_OUTPUT::LOCAL_POSITION_NED))
 		{
 			return false;
 		}

@@ -28,6 +28,6 @@ menuconfig USER_MAVLINK
 config MAVLINK_SOURCE_NAVPUTER
 	bool "Use Navputer as MAVLink position source"
 	depends on MODULES_MAVLINK && MODULES_NAVPUTER
-	default y
+	default n
 	---help---
 		Use Navputer as MAVLink position source instead of EKF2.
