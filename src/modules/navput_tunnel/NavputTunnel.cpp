@@ -39,16 +39,13 @@
 #include <dds_serializer.h>
 
 #include <px4/msg/NavputLocalPosition.h>
-#include <px4/msg/VehicleLocalPosition.h>
 #include <px4/msg/SensorGps.h>
 #include <px4/msg/AuxGlobalPosition.h>
 #include <px4/msg/NavputFusionControl.h>
 #include <px4/msg/NavputGnssSpoofDetector.h>
 #include <px4/msg/RangingBeacon.h>
 #include <px4/msg/EstimatorAidSource2d.h>
-#include <px4/msg/NavputAidSource2d.h>
 #include <px4/msg/NavputAidSource1d.h>
-#include <px4/msg/NavputAttitude.h>
 #include <px4/msg/NavputStatusFlags.h>
 
 using namespace time_literals;
@@ -155,15 +152,6 @@ void NavputTunnel::Run()
 	}
 
 	{
-		vehicle_local_position_s msg;
-
-		if (_vehicle_local_position_sub.update(&msg)) {
-			serialize_and_publish(PAYLOAD_TYPE_VEHICLE_LOCAL_POSITION, &msg, sizeof(msg),
-					      px4_msgs_msg_VehicleLocalPosition_cdrstream_desc.ops.ops);
-		}
-	}
-
-	{
 		sensor_gps_s msg;
 
 		if (_vehicle_gps_position_sub.update(&msg)) {
@@ -218,29 +206,11 @@ void NavputTunnel::Run()
 	}
 
 	{
-		navput_aid_source2d_s msg;
-
-		if (_navput_aid_src_aux_global_position_sub.update(&msg)) {
-			serialize_and_publish(PAYLOAD_TYPE_NAVPUT_AID_SOURCE_2D, &msg, sizeof(msg),
-					      px4_msgs_msg_NavputAidSource2d_cdrstream_desc.ops.ops);
-		}
-	}
-
-	{
 		navput_aid_source1d_s msg;
 
 		if (_navput_aid_src_ranging_beacon_sub.update(&msg)) {
 			serialize_and_publish(PAYLOAD_TYPE_NAVPUT_AID_SOURCE_1D, &msg, sizeof(msg),
 					      px4_msgs_msg_NavputAidSource1d_cdrstream_desc.ops.ops);
-		}
-	}
-
-	{
-		navput_attitude_s msg;
-
-		if (_navput_attitude_sub.update(&msg)) {
-			serialize_and_publish(PAYLOAD_TYPE_NAVPUT_ATTITUDE, &msg, sizeof(msg),
-					      px4_msgs_msg_NavputAttitude_cdrstream_desc.ops.ops);
 		}
 	}
 

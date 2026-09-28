@@ -48,7 +48,6 @@
 #include <uORB/Publication.hpp>
 #include <uORB/topics/mavlink_tunnel.h>
 #include <uORB/topics/navput_local_position.h>
-#include <uORB/topics/vehicle_local_position.h>
 #include <uORB/topics/sensor_gps.h>
 #include <uORB/topics/aux_global_position.h>
 #include <uORB/topics/navput_fusion_control.h>
@@ -56,9 +55,7 @@
 #include <uORB/topics/navput_status_flags.h>
 #include <uORB/topics/ranging_beacon.h>
 #include <uORB/topics/estimator_aid_source2d.h>
-#include <uORB/topics/navput_aid_source2d.h>
 #include <uORB/topics/navput_aid_source1d.h>
-#include <uORB/topics/navput_attitude.h>
 
 using namespace time_literals;
 
@@ -117,21 +114,18 @@ private:
 	 * other before MavlinkTunnelStream (running on its own, independently-scheduled loop) drains them. */
 	void publish_fragments(uint16_t payload_type, const uint8_t *cdr, size_t cdr_len);
 
-	// Per-topic output rate caps, to keep high-rate estimator topics (attitude
-	// especially) from clogging the MAVLink link. Fixed at compile time; bump
-	// these if a link with more headroom needs more detail.
-	uORB::SubscriptionInterval _navput_local_position_sub{ORB_ID(navput_local_position), 200_ms};             // 5 Hz
-	uORB::SubscriptionInterval _vehicle_local_position_sub{ORB_ID(vehicle_local_position), 200_ms};           // 5 Hz
-	uORB::SubscriptionInterval _vehicle_gps_position_sub{ORB_ID(vehicle_gps_position), 200_ms};               // 5 Hz
-	uORB::SubscriptionInterval _aux_global_position_sub{ORB_ID(aux_global_position), 200_ms};                 // 5 Hz
-	uORB::SubscriptionInterval _navput_fusion_control_sub{ORB_ID(navput_fusion_control), 1_s};                // 1 Hz
-	uORB::SubscriptionInterval _navput_gnss_spoof_detector_sub{ORB_ID(navput_gnss_spoof_detector), 1_s};      // 1 Hz
-	uORB::SubscriptionInterval _ranging_beacon_sub{ORB_ID(ranging_beacon), 200_ms};                           // 5 Hz
-	uORB::SubscriptionInterval _estimator_aid_src_aux_global_position_sub{ORB_ID(estimator_aid_src_aux_global_position), 200_ms}; // 5 Hz
-	uORB::SubscriptionInterval _navput_aid_src_aux_global_position_sub{ORB_ID(navput_aid_src_aux_global_position), 200_ms};       // 5 Hz
-	uORB::SubscriptionInterval _navput_aid_src_ranging_beacon_sub{ORB_ID(navput_aid_src_ranging_beacon), 200_ms};                 // 5 Hz
-	uORB::SubscriptionInterval _navput_attitude_sub{ORB_ID(navput_attitude), 100_ms};                         // 10 Hz
-	uORB::SubscriptionInterval _navput_status_flags_sub{ORB_ID(navput_status_flags), 1_s};                      // 1 Hz
+	// Per-topic output rate caps, to keep high-rate estimator topics from
+	// clogging the MAVLink link. Fixed at compile time; bump these if a link
+	// with more headroom needs more detail.
+	uORB::SubscriptionInterval _navput_local_position_sub{ORB_ID(navput_local_position), 1000_ms};             // 1 Hz
+	uORB::SubscriptionInterval _vehicle_gps_position_sub{ORB_ID(vehicle_gps_position), 1000_ms};               // 1 Hz
+	uORB::SubscriptionInterval _aux_global_position_sub{ORB_ID(aux_global_position), 1000_ms};                 // 1 Hz
+	uORB::SubscriptionInterval _navput_fusion_control_sub{ORB_ID(navput_fusion_control), 1_s};                 // 1 Hz
+	uORB::SubscriptionInterval _navput_gnss_spoof_detector_sub{ORB_ID(navput_gnss_spoof_detector), 2_s};       // 0.5 Hz
+	uORB::SubscriptionInterval _ranging_beacon_sub{ORB_ID(ranging_beacon), 500_ms};                            // 2 Hz
+	uORB::SubscriptionInterval _estimator_aid_src_aux_global_position_sub{ORB_ID(estimator_aid_src_aux_global_position), 1000_ms}; // 1 Hz
+	uORB::SubscriptionInterval _navput_aid_src_ranging_beacon_sub{ORB_ID(navput_aid_src_ranging_beacon), 500_ms};                  // 2 Hz
+	uORB::SubscriptionInterval _navput_status_flags_sub{ORB_ID(navput_status_flags), 1_s};                     // 1 Hz
 
 	uORB::Publication<mavlink_tunnel_s> _tunnel_out_pub{ORB_ID(mavlink_tunnel_out)};
 };
