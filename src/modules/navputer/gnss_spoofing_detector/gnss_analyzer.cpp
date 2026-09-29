@@ -47,15 +47,20 @@ constexpr float kMaxStddevMultiplier = 10.f;
 constexpr uint64_t kVelWindowDurationUs = 2'000'000;
 constexpr uint64_t kOldestPossibleSampleToCompareUs = 2'500'000;
 
-constexpr float kVelSafeSigma = 1.0f;
-constexpr float kVelSevereSigma = 3.0f;
-constexpr float kRawVelPosSafeError = 1.0f;
-constexpr float kRawVelPosSevereError = 3.0f;
+// What NormalizedError (Mahalanobis distance) values mean:
+// 2.45 -> 95% of cases
+// 3.03 -> 99% of cases
+// Severe thresholds of 5.0 are deliberately conservative.
+
+constexpr float kVelSafeNormalizedError = 2.5f;
+constexpr float kVelSevereNormalizedError = 5.0f;
+constexpr float kRawVelPosSafeErrorMps = 1.0f;
+constexpr float kRawVelPosSevereErrorMps = 3.0f;
 constexpr float kSafeSuspicionDecreasePerWindow = 0.1f;
 constexpr float kMaxSuspicionIncreasePerWindow = 0.8f;
 
-constexpr float kPosSafeSigma = 2.5f;
-constexpr float kPosSevereSigma = 5.f;
+constexpr float kPosSafeNormalizedError = 2.5f;
+constexpr float kPosSevereNormalizedError = 5.0f;
 constexpr float kSafePositionSuspicionDecrease = 0.1f;
 constexpr float kMaxPositionSuspicionIncrease = 0.4f;
 constexpr uint64_t kPosMaxGnssInterpolationGapUs = 250'000;
@@ -165,10 +170,25 @@ void GnssImuDeltaVelocityAnalyzer::analyze(const GnssEndpointHistory &history)
 
 	const matrix::Vector3f gnss_delta_velocity = recent.gnss_velocity_ned - old.gnss_velocity_ned;
 	const matrix::Vector3f imu_delta_velocity = recent.imu_cumulative_delta_velocity_ned - old.imu_cumulative_delta_velocity_ned;
-
 	const matrix::Vector3f residual = gnss_delta_velocity - imu_delta_velocity;
+
+	const float window_dt_s = static_cast<float>(recent.time_us - old.time_us) * 1e-6f;
+	if (!PX4_ISFINITE(window_dt_s) || window_dt_s <= 0.f)
+	{
+		return;
+	}
+
 	const matrix::Vector3f gnss_delta_velocity_variance = recent.gnss_velocity_ned_variance + old.gnss_velocity_ned_variance;
-	const matrix::Vector3f imu_delta_velocity_variance = recent.imu_cumulative_delta_velocity_variance - old.imu_cumulative_delta_velocity_variance;
+	const matrix::Vector3f imu_white_noise_variance = recent.imu_cumulative_white_noise_velocity_variance - old.imu_cumulative_white_noise_velocity_variance;
+
+	Vector3f bias_variance;
+	for (size_t axis = 0; axis < 3; ++axis)
+	{
+		bias_variance(axis) = math::max(recent.imu_acceleration_bias_variance(axis), old.imu_acceleration_bias_variance(axis));
+	}
+	const Vector3f bias_velocity_variance = bias_variance * math::sq(window_dt_s);
+	const Vector3f imu_delta_velocity_variance = imu_white_noise_variance + bias_velocity_variance;
+
 	const matrix::Vector3f residual_variance = gnss_delta_velocity_variance + imu_delta_velocity_variance;
 
 	if (!PX4_ISFINITE(residual_variance(0))
@@ -181,7 +201,7 @@ void GnssImuDeltaVelocityAnalyzer::analyze(const GnssEndpointHistory &history)
 
 	const float error = sqrtf(residual(0) * residual(0) / residual_variance(0) + residual(1) * residual(1) / residual_variance(1));
 
-	updateWindowedSuspicion(error, kVelSafeSigma, kVelSevereSigma, window_fraction);
+	updateWindowedSuspicion(error, kVelSafeNormalizedError, kVelSevereNormalizedError, window_fraction);
 	_last_analysis_time_us = recent.time_us;
 }
 
@@ -246,7 +266,7 @@ void GnssVelocityConsistencyAnalyzer::analyze(const GnssRawHistory &history)
 	const float score_dt_s = (recent.time_us - _last_analysis_time_us) * 1e-6f;
 	const float window_fraction = math::constrain(score_dt_s / (kVelWindowDurationUs * 1e-6f), 0.f, 1.f);
 
-	updateWindowedSuspicion(error, kRawVelPosSafeError, kRawVelPosSevereError, window_fraction);
+	updateWindowedSuspicion(error, kRawVelPosSafeErrorMps, kRawVelPosSevereErrorMps, window_fraction);
 	_last_analysis_time_us = recent.time_us;
 }
 
@@ -261,14 +281,14 @@ void GnssAuxPosAnalyzer::updateSuspicion(float normalized_error)
 {
 	float suspicion_delta = 0.f;
 
-	if (normalized_error <= kPosSafeSigma)
+	if (normalized_error <= kPosSafeNormalizedError)
 	{
 		suspicion_delta = -kSafePositionSuspicionDecrease;
 	}
 	else
 	{
-		const float severity = math::constrain((normalized_error - kPosSafeSigma)
-			/ (kPosSevereSigma - kPosSafeSigma), 0.f, 1.f);
+		const float severity = math::constrain((normalized_error - kPosSafeNormalizedError)
+			/ (kPosSevereNormalizedError - kPosSafeNormalizedError), 0.f, 1.f);
 		suspicion_delta = kMaxPositionSuspicionIncrease * severity;
 	}
 
@@ -417,7 +437,7 @@ void GnssAnalyzer::reset(bool origin_valid)
 	_gnss_raw_history.reset();
 	_aux_position_history.reset();
 	_imu_cumulative_velocity_ned.setZero();
-	_imu_cumulative_velocity_variance.setZero();
+	_imu_cumulative_white_noise_velocity_variance.setZero();
 	_recovery_latch = {};
 
 	const float initial_suspicion = origin_valid ? kSpoofThreshold : 0.f;
@@ -436,11 +456,12 @@ void GnssAnalyzer::pushImu(const DeltaVelocityEarth &sample)
 	}
 
 	_imu_cumulative_velocity_ned += sample.delta_velocity_ned;
-	_imu_cumulative_velocity_variance += sample.delta_velocity_variance_ned;
+	_imu_cumulative_white_noise_velocity_variance += sample.delta_velocity_white_noise_variance_ned;
 	_high_freq_imu_history.push(ImuCumulativeVelocityEndpoint{
 		.time_us = sample.time_us,
 		.cumulative_velocity = _imu_cumulative_velocity_ned,
-		.cumulative_velocity_variance = _imu_cumulative_velocity_variance});
+		.cumulative_white_noise_velocity_variance = _imu_cumulative_white_noise_velocity_variance,
+		.acceleration_bias_variance = sample.acceleration_bias_variance_ned});
 }
 
 void GnssAnalyzer::pushAuxPosition(const AuxPositionSample &sample)
@@ -513,9 +534,15 @@ void GnssAnalyzer::pushGnss(const GnssKalmanFilter::Measurement &sample)
 		.gnss_velocity_ned = _gnss_kf_snapshot.velocity_ned,
 		.gnss_velocity_ned_variance = _gnss_kf_snapshot.velocity_variance,
 		.imu_cumulative_delta_velocity_ned = imu_velocity,
-		.imu_cumulative_delta_velocity_variance = lerp(
-			before.cumulative_velocity_variance,
-			after.cumulative_velocity_variance,
+		.imu_cumulative_white_noise_velocity_variance = lerp(
+			before.cumulative_white_noise_velocity_variance,
+			after.cumulative_white_noise_velocity_variance,
+			before.time_us,
+			after.time_us,
+			sample.time_us),
+		.imu_acceleration_bias_variance = lerp(
+			before.acceleration_bias_variance,
+			after.acceleration_bias_variance,
 			before.time_us,
 			after.time_us,
 			sample.time_us)});

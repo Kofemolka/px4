@@ -446,15 +446,25 @@ DeltaVelocityEarth Ekf::immediateLatestDeltaVelocity() const
 {
 	DeltaVelocityEarth delta_velocity = _output_predictor.immediateLatestDeltaVelocity();
 
-	// Conservative isotropic delta-velocity uncertainty
-	const Vector3f accel_bias_variance = getAccelBiasVariance();
-	const float max_accel_bias_variance = math::max(
-		accel_bias_variance(0),
-		math::max(accel_bias_variance(1),
-			accel_bias_variance(2)));
-	const float delta_velocity_variance = (_params.ekf2_acc_noise * _params.ekf2_acc_noise + max_accel_bias_variance) * delta_velocity.dt * delta_velocity.dt;
+	const float white_noise_variance = math::sq(_params.ekf2_acc_noise) * math::sq(delta_velocity.dt);
 
-	delta_velocity.delta_velocity_variance_ned = { delta_velocity_variance, delta_velocity_variance, delta_velocity_variance };
+	delta_velocity.delta_velocity_white_noise_variance_ned = {
+		white_noise_variance,
+		white_noise_variance,
+		white_noise_variance
+	};
+
+	const Vector3f accel_bias_variance = getAccelBiasVariance();
+
+	const float max_accel_bias_variance = math::max(accel_bias_variance(0),
+			math::max(accel_bias_variance(1), accel_bias_variance(2)));
+
+	delta_velocity.acceleration_bias_variance_ned = {
+		max_accel_bias_variance,
+		max_accel_bias_variance,
+		max_accel_bias_variance
+	};
+
 	return delta_velocity;
 }
 

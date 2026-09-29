@@ -101,3 +101,7 @@ px4_add_module(
 	)
 
 add_dependencies(modules__navputer parameters_header)
+
+if(BUILD_TESTING)
+	add_subdirectory(gnss_spoofing_detector/test)
+endif()

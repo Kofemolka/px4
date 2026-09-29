@@ -45,7 +45,8 @@ struct DeltaVelocityEarth
 {
 	uint64_t time_us{0};
 	matrix::Vector3f delta_velocity_ned{};
-	matrix::Vector3f delta_velocity_variance_ned{};
+	matrix::Vector3f delta_velocity_white_noise_variance_ned{};
+	matrix::Vector3f acceleration_bias_variance_ned{};
 	float dt{0.f};
 };
 

@@ -71,8 +71,10 @@ struct GnssEndpoint
 	matrix::Vector3f gnss_position_ned_variance{};
 	matrix::Vector3f gnss_velocity_ned{};
 	matrix::Vector3f gnss_velocity_ned_variance{};
+
 	matrix::Vector3f imu_cumulative_delta_velocity_ned{};
-	matrix::Vector3f imu_cumulative_delta_velocity_variance{};
+	matrix::Vector3f imu_cumulative_white_noise_velocity_variance{};
+	matrix::Vector3f imu_acceleration_bias_variance{};
 };
 struct GnssRaw
 {
@@ -84,7 +86,8 @@ struct ImuCumulativeVelocityEndpoint
 {
 	uint64_t time_us{0};
 	matrix::Vector3f cumulative_velocity{};
-	matrix::Vector3f cumulative_velocity_variance{};
+	matrix::Vector3f cumulative_white_noise_velocity_variance{};
+	matrix::Vector3f acceleration_bias_variance{};
 };
 struct AuxPositionSample
 {
@@ -220,7 +223,7 @@ private:
 	GnssAnalyzerTypes::IndependentRecoveryLatch _recovery_latch;
 
 	matrix::Vector3f _imu_cumulative_velocity_ned{};
-	matrix::Vector3f _imu_cumulative_velocity_variance{};
+	matrix::Vector3f _imu_cumulative_white_noise_velocity_variance{};
 
 	GnssAnalyzerTypes::GnssImuDeltaVelocityAnalyzer _imu_velocity_analyzer;
 	GnssAnalyzerTypes::GnssVelocityConsistencyAnalyzer _gnss_velocity_consistency_analyzer;
