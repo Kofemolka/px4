@@ -21,15 +21,16 @@ constexpr uint64_t kWarmupDurationUs = 10'000'000;
 constexpr float kNominalFigureEightPeriodS = 40.f;
 constexpr float kAggressiveFigureEightPeriodS = 15.f;
 constexpr float kExtremeFigureEightPeriodS = 10.f;
+constexpr float kFigureEightCycleCount = 5.f;
 
-// From vehicle_gps_position in Navputer SITL ULogs (2026-09-25 through 2026-09-28):
+// From vehicle_gps_position in Navputer SITL ULogs:
 // eph = 0.9 m, epv = 1.78 m, s_variance_m_s = 0.4 m/s.
 constexpr float kGnssHorizontalPositionStdDevM = 0.9f;
 constexpr float kGnssVerticalPositionStdDevM = 1.78f;
 constexpr float kGnssVelocityStdDevMS = 0.4f;
 
-// Representative aux_global_position eph from the same logs is 57.1 m. Production
-// splits its total horizontal variance equally between north and east.
+// Representative aux_global_position eph from the same logs is 57.1 m.
+// Production splits its total horizontal variance equally between north and east.
 constexpr float kAuxHorizontalPositionStdDevM = 57.1f / 1.41421356237f;
 
 // Ekf::immediateLatestDeltaVelocity() reports an isotropic variance of
@@ -53,37 +54,84 @@ protected:
 	{
 		_analyzer.reset(true);
 		_random_generator.seed(0x4E415650);
-		_gnss_position_noise = {
-			sampleGaussian(kGnssHorizontalPositionStdDevM),
-			sampleGaussian(kGnssHorizontalPositionStdDevM),
-			sampleGaussian(kGnssVerticalPositionStdDevM)
-		};
 
 		if (const char *trace_path = getenv("GNSS_ANALYZER_TRACE")) {
-			std::string output_path{trace_path};
-			const std::string test_name = ::testing::UnitTest::GetInstance()->current_test_info()->name();
-			const size_t extension_position = output_path.find_last_of('.');
-			const size_t directory_position = output_path.find_last_of("/\\");
-			const size_t suffix_position = extension_position != std::string::npos
-				&& (directory_position == std::string::npos || extension_position > directory_position)
-				? extension_position : output_path.size();
-			output_path.insert(suffix_position, "_" + test_name);
-
-			_trace.open(output_path);
-			ASSERT_TRUE(_trace.is_open()) << "Failed to open GNSS analyzer trace " << output_path;
-			_trace << "time_s,north_m,east_m,down_m,velocity_n_m_s,velocity_e_m_s,velocity_d_m_s,"
-			       << "speed_m_s,acceleration_n_m_s2,acceleration_e_m_s2,acceleration_d_m_s2,"
-			       << "gnss_north_m,gnss_east_m,gnss_down_m,gnss_velocity_n_m_s,gnss_velocity_e_m_s,"
-			       << "gnss_velocity_d_m_s,gnss_kf_north_m,gnss_kf_east_m,gnss_kf_down_m,"
-			       << "gnss_kf_velocity_n_m_s,gnss_kf_velocity_e_m_s,gnss_kf_velocity_d_m_s,"
-			       << "imu_velocity_suspicion,gnss_velocity_consistency_suspicion,position_suspicion,state\n";
-			_trace << std::fixed << std::setprecision(6);
+			openTraceStream(trace_path);
 		}
 	}
 
 	void TearDown() override
 	{
 		_trace.close();
+	}
+
+	void openTraceStream(const char *trace_path)
+	{
+		std::string output_path{trace_path};
+		const std::string test_name = ::testing::UnitTest::GetInstance()->current_test_info()->name();
+		const size_t extension_position = output_path.find_last_of('.');
+		const size_t directory_position = output_path.find_last_of("/\\");
+		const size_t suffix_position = extension_position != std::string::npos
+			&& (directory_position == std::string::npos || extension_position > directory_position)
+			? extension_position : output_path.size();
+		output_path.insert(suffix_position, "_" + test_name);
+
+		_trace.open(output_path);
+		ASSERT_TRUE(_trace.is_open()) << "Failed to open GNSS analyzer trace " << output_path;
+		_trace << "time_s,north_m,east_m,down_m,velocity_n_m_s,velocity_e_m_s,velocity_d_m_s,"
+		       << "speed_m_s,acceleration_n_m_s2,acceleration_e_m_s2,acceleration_d_m_s2,"
+		       << "gnss_north_m,gnss_east_m,gnss_down_m,gnss_velocity_n_m_s,gnss_velocity_e_m_s,"
+		       << "gnss_velocity_d_m_s,gnss_kf_north_m,gnss_kf_east_m,gnss_kf_down_m,"
+		       << "gnss_kf_velocity_n_m_s,gnss_kf_velocity_e_m_s,gnss_kf_velocity_d_m_s,"
+		       << "raw_gnss_delta_velocity_n_m_s,raw_gnss_delta_velocity_e_m_s,"
+		       << "gnss_kf_delta_velocity_n_m_s,gnss_kf_delta_velocity_e_m_s,"
+		       << "imu_delta_velocity_n_m_s,imu_delta_velocity_e_m_s,"
+		       << "imu_gnss_residual_n_m_s,imu_gnss_residual_e_m_s,"
+		       << "imu_gnss_residual_variance_n,imu_gnss_residual_variance_e,"
+		       << "imu_gnss_normalized_error,gnss_kf_acceleration_noise_density_squared,"
+		       << "imu_velocity_suspicion,gnss_velocity_consistency_suspicion,position_suspicion,state\n";
+		_trace << std::fixed << std::setprecision(6);
+	}
+
+	void maybeTraceIteration(const float time_s,
+		const TruthSample& truth,
+		const matrix::Vector3f& gnss_position_ned,
+		const matrix::Vector3f& gnss_velocity_ned,
+		const GnssAnalyzerTypes::GnssAnalyzerExtendedState& state)
+	{
+		if (_trace.is_open())
+		{
+			_trace << time_s << ','
+			       << truth.position_ned(0) << ',' << truth.position_ned(1) << ',' << truth.position_ned(2) << ','
+			       << truth.velocity_ned(0) << ',' << truth.velocity_ned(1) << ',' << truth.velocity_ned(2) << ','
+			       << truth.velocity_ned.norm() << ','
+			       << truth.acceleration_ned(0) << ',' << truth.acceleration_ned(1) << ','
+			       << truth.acceleration_ned(2) << ','
+			       << gnss_position_ned(0) << ',' << gnss_position_ned(1) << ',' << gnss_position_ned(2) << ','
+			       << gnss_velocity_ned(0) << ',' << gnss_velocity_ned(1) << ',' << gnss_velocity_ned(2) << ','
+			       << state.gnss_kf_snapshot.position_ned(0) << ','
+			       << state.gnss_kf_snapshot.position_ned(1) << ','
+			       << state.gnss_kf_snapshot.position_ned(2) << ','
+			       << state.gnss_kf_snapshot.velocity_ned(0) << ','
+			       << state.gnss_kf_snapshot.velocity_ned(1) << ','
+			       << state.gnss_kf_snapshot.velocity_ned(2) << ','
+			       << state.imu_velocity_diagnostics.raw_gnss_delta_velocity(0) << ','
+			       << state.imu_velocity_diagnostics.raw_gnss_delta_velocity(1) << ','
+			       << state.imu_velocity_diagnostics.filtered_gnss_delta_velocity(0) << ','
+			       << state.imu_velocity_diagnostics.filtered_gnss_delta_velocity(1) << ','
+			       << state.imu_velocity_diagnostics.imu_delta_velocity(0) << ','
+			       << state.imu_velocity_diagnostics.imu_delta_velocity(1) << ','
+			       << state.imu_velocity_diagnostics.residual(0) << ','
+			       << state.imu_velocity_diagnostics.residual(1) << ','
+			       << state.imu_velocity_diagnostics.residual_variance(0) << ','
+			       << state.imu_velocity_diagnostics.residual_variance(1) << ','
+			       << state.imu_velocity_diagnostics.normalized_error << ','
+			       << state.gnss_kf_acceleration_noise_density_squared << ','
+			       << state.imu_velocity_suspicion << ','
+			       << state.gnss_velocity_consistency_suspicion << ','
+			       << state.position_suspicion << ','
+			       << static_cast<int>(state.state) << '\n';
+		}
 	}
 
 	float sampleGaussian(const float standard_deviation)
@@ -98,32 +146,25 @@ protected:
 		position_ned = truth.position_ned;
 		velocity_ned = truth.velocity_ned;
 
-		if (_last_gnss_time_us == 0) {
-			position_ned += _gnss_position_noise;
-			_previous_gnss_position_ned = position_ned;
-			_last_gnss_time_us = time_us;
-			return;
-		}
-
-		const float dt = static_cast<float>(time_us - _last_gnss_time_us) * 1e-6f;
-		const matrix::Vector3f previous_position_noise = _gnss_position_noise;
+		const float time_s = static_cast<float>(time_us - kStartTimeUs) * 1e-6f;
+		constexpr float horizontal_frequencies_rad_s[]{0.2f, 0.4f, 0.63f};
+		constexpr float vertical_frequencies_rad_s[]{0.1f, 0.2f, 0.32f};
+		constexpr float component_count = 3.f;
+		const float horizontal_amplitude = kGnssHorizontalPositionStdDevM * sqrtf(2.f / component_count);
+		const float vertical_amplitude = kGnssVerticalPositionStdDevM * sqrtf(2.f / component_count);
 
 		for (size_t axis = 0; axis < 3; ++axis) {
-			const float position_std_dev = axis < 2 ? kGnssHorizontalPositionStdDevM : kGnssVerticalPositionStdDevM;
-			// A stationary first-order Gauss-Markov process gives random position error while
-			// keeping its finite-difference velocity error at the reported GNSS standard deviation.
-			const float velocity_to_position_ratio = kGnssVelocityStdDevMS * dt / position_std_dev;
-			const float correlation = math::constrain(1.f - 0.5f * velocity_to_position_ratio * velocity_to_position_ratio,
-								 0.f, 1.f);
-			const float innovation_std_dev = position_std_dev * sqrtf(1.f - correlation * correlation);
-			_gnss_position_noise(axis) = correlation * previous_position_noise(axis)
-							+ sampleGaussian(innovation_std_dev);
-		}
+			const float *frequencies = axis < 2 ? horizontal_frequencies_rad_s : vertical_frequencies_rad_s;
+			const float amplitude = axis < 2 ? horizontal_amplitude : vertical_amplitude;
 
-		position_ned += _gnss_position_noise;
-		velocity_ned = (position_ned - _previous_gnss_position_ned) / dt;
-		_previous_gnss_position_ned = position_ned;
-		_last_gnss_time_us = time_us;
+			for (size_t component = 0; component < 3; ++component) {
+				const float phase = 0.37f + static_cast<float>(axis) * 1.1f
+						    + static_cast<float>(component) * 1.7f;
+				const float angle = frequencies[component] * time_s + phase;
+				position_ned(axis) += amplitude * sinf(angle);
+				velocity_ned(axis) += amplitude * frequencies[component] * cosf(angle);
+			}
+		}
 	}
 
 	void runTrajectory(const Trajectory trajectory, const uint64_t duration_us)
@@ -207,26 +248,11 @@ protected:
 
 			const auto state = _analyzer.extendedState();
 
-			if (_trace.is_open()) {
-				_trace << time_s << ','
-				       << truth.position_ned(0) << ',' << truth.position_ned(1) << ',' << truth.position_ned(2) << ','
-				       << truth.velocity_ned(0) << ',' << truth.velocity_ned(1) << ',' << truth.velocity_ned(2) << ','
-				       << truth.velocity_ned.norm() << ','
-				       << truth.acceleration_ned(0) << ',' << truth.acceleration_ned(1) << ','
-				       << truth.acceleration_ned(2) << ','
-				       << gnss_position_ned(0) << ',' << gnss_position_ned(1) << ',' << gnss_position_ned(2) << ','
-				       << gnss_velocity_ned(0) << ',' << gnss_velocity_ned(1) << ',' << gnss_velocity_ned(2) << ','
-				       << state.gnss_kf_snapshot.position_ned(0) << ','
-				       << state.gnss_kf_snapshot.position_ned(1) << ','
-				       << state.gnss_kf_snapshot.position_ned(2) << ','
-				       << state.gnss_kf_snapshot.velocity_ned(0) << ','
-				       << state.gnss_kf_snapshot.velocity_ned(1) << ','
-				       << state.gnss_kf_snapshot.velocity_ned(2) << ','
-				       << state.imu_velocity_suspicion << ','
-				       << state.gnss_velocity_consistency_suspicion << ','
-				       << state.position_suspicion << ','
-				       << static_cast<int>(state.state) << '\n';
-			}
+			maybeTraceIteration(time_s,
+				truth,
+				gnss_position_ned,
+				gnss_velocity_ned,
+				state);
 
 			if (time_us - kStartTimeUs >= monitoring_start_us) {
 				_max_imu_velocity_suspicion = math::max(_max_imu_velocity_suspicion,
@@ -237,9 +263,6 @@ protected:
 
 	GnssAnalyzer _analyzer;
 	std::mt19937 _random_generator;
-	matrix::Vector3f _gnss_position_noise{};
-	matrix::Vector3f _previous_gnss_position_ned{};
-	uint64_t _last_gnss_time_us{0};
 	std::ofstream _trace;
 	float _max_imu_velocity_suspicion{0.f};
 };
@@ -269,6 +292,7 @@ TruthSample figureEightTrajectory(const float time_s, const float period_s)
 		-4.f * east_amplitude_m * angular_rate_rad_s * angular_rate_rad_s * sinf(twice_phase),
 		0.f
 	};
+
 	return sample;
 }
 
@@ -290,26 +314,28 @@ TruthSample extremeFigureEightTrajectory(const float time_s)
 TEST_F(GnssAnalyzerTest, NominalFigureEightRemainsTrusted)
 {
 	runTrajectory(nominalFigureEightTrajectory,
-		      static_cast<uint64_t>(kNominalFigureEightPeriodS * 1e6f));
+		      static_cast<uint64_t>(kFigureEightCycleCount * kNominalFigureEightPeriodS * 1e6f));
 
 	EXPECT_LT(_max_imu_velocity_suspicion, 0.8f);
 	EXPECT_EQ(_analyzer.state(), GnssSpoofingState::Trusted);
 }
 
-TEST_F(GnssAnalyzerTest, AggressiveFigureEightDoesNotTriggerImuDetector)
+TEST_F(GnssAnalyzerTest, AggressiveFigureEightRemainsTrusted)
 {
 	runTrajectory(aggressiveFigureEightTrajectory,
-		      static_cast<uint64_t>(kAggressiveFigureEightPeriodS * 1e6f));
+		      static_cast<uint64_t>(kFigureEightCycleCount * kAggressiveFigureEightPeriodS * 1e6f));
 
 	EXPECT_LT(_max_imu_velocity_suspicion, 0.8f);
+	EXPECT_EQ(_analyzer.state(), GnssSpoofingState::Trusted);
 }
 
-TEST_F(GnssAnalyzerTest, ExtremeFigureEightDoesNotTriggerImuDetector)
+TEST_F(GnssAnalyzerTest, ExtremeFigureEightRemainsTrusted)
 {
 	runTrajectory(extremeFigureEightTrajectory,
-		      static_cast<uint64_t>(kExtremeFigureEightPeriodS * 1e6f));
+		      static_cast<uint64_t>(kFigureEightCycleCount * kExtremeFigureEightPeriodS * 1e6f));
 
 	EXPECT_LT(_max_imu_velocity_suspicion, 0.8f);
+	EXPECT_EQ(_analyzer.state(), GnssSpoofingState::Trusted);
 }
 
 } // namespace
