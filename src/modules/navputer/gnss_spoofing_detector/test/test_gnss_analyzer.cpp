@@ -338,9 +338,8 @@ protected:
 			state);
 	}
 
-	void generateAuxSample(const uint64_t time_us, const TruthSample& truth, uint64_t& next_aux_position_time_us, const Trajectory& trajectory)
+	void generateAuxSample(const uint64_t time_us, uint64_t& next_aux_position_time_us, const Trajectory& trajectory)
 	{
-		// Aux timestamps need a newer GNSS endpoint so that the analyzer can interpolate it.
 		while (next_aux_position_time_us <= time_us)
 		{
 			const float aux_time_s = static_cast<float>(next_aux_position_time_us - kStartTimeUs) * 1e-6f;
@@ -400,7 +399,7 @@ protected:
 
 			next_gnss_time_us += kGnssPeriodUs;
 
-			generateAuxSample(time_us, truth, next_aux_position_time_us, trajectory);
+			generateAuxSample(time_us, next_aux_position_time_us, trajectory);
 
 			const auto state = _analyzer.extendedState();
 
@@ -414,7 +413,7 @@ protected:
 				_max_imu_velocity_suspicion = math::max(_max_imu_velocity_suspicion,
 								       static_cast<float>(state.imu_velocity_suspicion));
 				_max_gnss_velocity_consistency_suspicion = math::max(_max_gnss_velocity_consistency_suspicion,
-									       static_cast<float>(state.gnss_velocity_consistency_suspicion));
+								       static_cast<float>(state.gnss_velocity_consistency_suspicion));
 				_max_aux_position_suspicion = math::max(_max_aux_position_suspicion,
 								       static_cast<float>(state.position_suspicion));
 			}
