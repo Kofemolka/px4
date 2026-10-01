@@ -51,6 +51,7 @@ static px4::atomic<Navputer *> _instance {};
 Navputer::Navputer(const px4::wq_config_t &config, bool replay_mode):
 	ModuleParams(nullptr),
 	ScheduledWorkItem(MODULE_NAME, config),
+	_mlat_aux(this),
 	_fusion_controller(this, *_ekf.getFusionControlHandle()),
 	_motion_detector(this),
 	_params(_ekf.getParamHandle()),

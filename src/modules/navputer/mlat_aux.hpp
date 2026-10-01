@@ -6,17 +6,17 @@
 #include <lib/lat_lon_alt/lat_lon_alt.hpp>
 #include <matrix/math.hpp>
 
+#include <px4_platform_common/module_params.h>
 #include <uORB/PublicationMulti.hpp>
 #include <uORB/Subscription.hpp>
-
 #include <uORB/topics/aux_global_position.h>
 #include <uORB/topics/navput_local_position.h>
 #include <uORB/topics/ranging_beacon.h>
 
-class MlatAux final
+class MlatAux final : public ModuleParams
 {
 public:
-	MlatAux() = default;
+	explicit MlatAux(ModuleParams* parent);
 
 	void update();
 
@@ -138,6 +138,11 @@ private:
 	matrix::Vector2d _last_solution_lat_lon{};
 
 	hrt_abstime _last_run{0};
+
+private:
+	DEFINE_PARAMETERS(
+		(ParamFloat<px4::params::NPT_RNGBC_NOISE>) _param_rngbcn_noise
+	)
 };
 
 #endif // MLAT_AUX_HPP

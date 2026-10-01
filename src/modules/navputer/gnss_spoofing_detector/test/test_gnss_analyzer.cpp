@@ -18,10 +18,16 @@ constexpr uint64_t kGnssPeriodUs = 125'000;
 constexpr uint64_t kAuxPositionPeriodUs = 544'000;
 constexpr uint64_t kStartTimeUs = 1'000'000;
 constexpr uint64_t kWarmupDurationUs = 10'000'000;
+
 constexpr float kNominalFigureEightPeriodS = 40.f;
 constexpr float kAggressiveFigureEightPeriodS = 15.f;
 constexpr float kExtremeFigureEightPeriodS = 10.f;
 constexpr float kFigureEightCycleCount = 5.f;
+
+constexpr float kNominalLoopedTrianglePeriodS = 64.f;
+constexpr float kAggressiveLoopedTrianglePeriodS = 24.f;
+constexpr float kExtremeLoopedTrianglePeriodS = 16.f;
+constexpr float kLoopedTriangleCycleCount = 5.f;
 
 // From vehicle_gps_position in Navputer SITL ULogs:
 // eph = 0.9 m, epv = 1.78 m, s_variance_m_s = 0.4 m/s.
@@ -267,6 +273,32 @@ protected:
 	float _max_imu_velocity_suspicion{0.f};
 };
 
+// Figure "Eight" trajectory:
+//             ╭───────╮
+//           ╭─╯       ╰─╮
+//          ╱             ╲
+//         ╱               ╲
+//         ╲               ╱
+//          ╲             ╱
+//           ╲           ╱
+//            ╲         ╱
+//             ╲       ╱
+//              ╲     ╱
+//               ╲   ╱
+//                ╲ ╱
+//                 ╳
+//                ╱ ╲
+//               ╱   ╲
+//              ╱     ╲
+//             ╱       ╲
+//            ╱         ╲
+//           ╱           ╲
+//          ╱             ╲
+//         ╱               ╲
+//         ╲               ╱
+//          ╲             ╱
+//           ╰─╮       ╭─╯
+//             ╰───────╯
 TruthSample figureEightTrajectory(const float time_s, const float period_s)
 {
 	constexpr float north_amplitude_m = 30.f;
@@ -311,6 +343,69 @@ TruthSample extremeFigureEightTrajectory(const float time_s)
 	return figureEightTrajectory(time_s, kExtremeFigureEightPeriodS);
 }
 
+// Triangle with small loops trajectory:
+//                        ╭───╮
+//                       ╱     ╲
+//                       ╲     ╱
+//                        ╲   ╱
+//                         ╲ ╱
+//                          ╳
+//                         ╱ ╲
+//                        ╱   ╲
+//                       ╱     ╲
+//                      ╱       ╲
+//                     ╱         ╲
+//                    ╱           ╲
+//           ╭───╮   ╱             ╲   ╭───╮
+//          ╱     ╲ ╱               ╲ ╱     ╲
+//          ╲     ╱───────────────────╲     ╱       
+//           ╰───╯                     ╰───╯
+TruthSample loopedTriangleTrajectory(const float time_s, const float period_s)
+{
+	constexpr float radius_m = 30.f;
+	constexpr float loop_ratio = 1.15f;
+	const float angular_rate_rad_s = 2.f * M_PI_F / period_s;
+
+	const float phase = angular_rate_rad_s * time_s;
+	const float twice_phase = 2.f * phase;
+
+	TruthSample sample{};
+	sample.position_ned = {
+		radius_m * (2.f * cosf(phase) + loop_ratio * cosf(twice_phase)),
+		radius_m * (2.f * sinf(phase) - loop_ratio * sinf(twice_phase)),
+		0.f
+	};
+	sample.velocity_ned = {
+		radius_m * angular_rate_rad_s * (-2.f * sinf(phase) - 2.f * loop_ratio * sinf(twice_phase)),
+		radius_m * angular_rate_rad_s * (2.f * cosf(phase) - 2.f * loop_ratio * cosf(twice_phase)),
+		0.f
+	};
+	sample.acceleration_ned = {
+		radius_m * angular_rate_rad_s * angular_rate_rad_s
+		* (-2.f * cosf(phase) - 4.f * loop_ratio * cosf(twice_phase)),
+		radius_m * angular_rate_rad_s * angular_rate_rad_s
+		* (-2.f * sinf(phase) + 4.f * loop_ratio * sinf(twice_phase)),
+		0.f
+	};
+
+	return sample;
+}
+
+TruthSample nominalLoopedTriangleTrajectory(const float time_s)
+{
+	return loopedTriangleTrajectory(time_s, kNominalLoopedTrianglePeriodS);
+}
+
+TruthSample aggressiveLoopedTriangleTrajectory(const float time_s)
+{
+	return loopedTriangleTrajectory(time_s, kAggressiveLoopedTrianglePeriodS);
+}
+
+TruthSample extremeLoopedTriangleTrajectory(const float time_s)
+{
+	return loopedTriangleTrajectory(time_s, kExtremeLoopedTrianglePeriodS);
+}
+
 TEST_F(GnssAnalyzerTest, NominalFigureEightRemainsTrusted)
 {
 	runTrajectory(nominalFigureEightTrajectory,
@@ -333,6 +428,33 @@ TEST_F(GnssAnalyzerTest, ExtremeFigureEightRemainsTrusted)
 {
 	runTrajectory(extremeFigureEightTrajectory,
 		      static_cast<uint64_t>(kFigureEightCycleCount * kExtremeFigureEightPeriodS * 1e6f));
+
+	EXPECT_LT(_max_imu_velocity_suspicion, 0.8f);
+	EXPECT_EQ(_analyzer.state(), GnssSpoofingState::Trusted);
+}
+
+TEST_F(GnssAnalyzerTest, NominalLoopedTriangleRemainsTrusted)
+{
+	runTrajectory(nominalLoopedTriangleTrajectory,
+		      static_cast<uint64_t>(kLoopedTriangleCycleCount * kNominalLoopedTrianglePeriodS * 1e6f));
+
+	EXPECT_LT(_max_imu_velocity_suspicion, 0.8f);
+	EXPECT_EQ(_analyzer.state(), GnssSpoofingState::Trusted);
+}
+
+TEST_F(GnssAnalyzerTest, AggressiveLoopedTriangleRemainsTrusted)
+{
+	runTrajectory(aggressiveLoopedTriangleTrajectory,
+		      static_cast<uint64_t>(kLoopedTriangleCycleCount * kAggressiveLoopedTrianglePeriodS * 1e6f));
+
+	EXPECT_LT(_max_imu_velocity_suspicion, 0.8f);
+	EXPECT_EQ(_analyzer.state(), GnssSpoofingState::Trusted);
+}
+
+TEST_F(GnssAnalyzerTest, ExtremeLoopedTriangleRemainsTrusted)
+{
+	runTrajectory(extremeLoopedTriangleTrajectory,
+		      static_cast<uint64_t>(kLoopedTriangleCycleCount * kExtremeLoopedTrianglePeriodS * 1e6f));
 
 	EXPECT_LT(_max_imu_velocity_suspicion, 0.8f);
 	EXPECT_EQ(_analyzer.state(), GnssSpoofingState::Trusted);
