@@ -1,4 +1,5 @@
 #include "gnss_spoof_gen.hpp"
+#include "spoofing_profiles.hpp"
 
 #include <drivers/drv_hrt.h>
 #include <drivers/drv_sensor.h>
@@ -19,8 +20,6 @@ constexpr float kDefaultOffsetMaxVelocity = 50.f; // m/s
 constexpr double kDefaultCarryOffLatDeg = -12.0464; // gcs deg
 constexpr double kDefaultCarryOffLonDeg = -77.0428; // gcs deg
 constexpr float kDefaultCarryOffMaxVelocity = 5000.f; // m/s
-
-constexpr float kMaxSlope = 1.875f;
 
 bool parseFloat(const char* str, float& value)
 {
@@ -45,46 +44,6 @@ bool GnssSpoofGen::init()
 	return true;
 }
 
-// h(u) = 10 * u^3 - 15 * u^4 + 6 * u^5
-float rampQuintic(const float u)
-{
-	const float progress = math::constrain(u, 0.f, 1.f);
-	const auto progress3 = progress * progress * progress;
-	const auto progress4 = progress3 * progress;
-	const auto progress5 = progress4 * progress;
-	return 10.f * progress3 - 15.f * progress4 + 6.f * progress5;
-}
-
-// h`(u) = 30 * p^2 * (1 - u)^2
-float rampQuinticDerivative(const float u)
-{
-	const float progress = math::constrain(u, 0.f, 1.f);
-	const float progress2 = progress * progress;
-	const float tmp = 1.f - progress;
-	const float tmp2 = tmp * tmp;
-	return 30.f * progress2 * tmp2;
-}
-
-// h(u) = u - 6u^3 + 8u^4 - 3u^5
-float rampQuinticCarryOffInitial(const float u)
-{
-	const float progress = math::constrain(u, 0.f, 1.f);
-	const auto progress3 = progress * progress * progress;
-	const auto progress4 = progress3 * progress;
-	const auto progress5 = progress4 * progress;
-	return progress - 6.f * progress3 + 8.f * progress4 - 3.f * progress5;
-}
-
-// h`(u) = 1 - 18u^2 + 32u^3 - 15u^4
-float rampQuinticDerivativeCarryOffInitial(const float u)
-{
-	const float progress = math::constrain(u, 0.f, 1.f);
-	const auto progress2 = progress * progress;
-	const auto progress3 = progress2 * progress;
-	const auto progress4 = progress3 * progress;
-	return 1.f - 18.f * progress2 + 32.f * progress3 - 15.f * progress4;
-}
-
 void GnssSpoofGen::spoofGradualOffset(sensor_gps_s &gps)
 {
 	if (!_origin_initialized)
@@ -107,39 +66,27 @@ void GnssSpoofGen::spoofGradualOffset(sensor_gps_s &gps)
 	const float dt = (gps.timestamp_sample - _pos_context.last_sample_time_us) / 1e6f;
 	_pos_context.last_sample_time_us = gps.timestamp_sample;
 
+	const GnssSpoofing::GradualOffsetSample offset = GnssSpoofing::gradualOffset(
+			_pos_context.target_ned,
+			_pos_context.max_speed,
+			_pos_context.progress,
+			dt);
+
+	_pos_context.progress = offset.progress;
+
 	matrix::Vector2f spoofed_position_ne = _origin_projection.project(
 		gps.latitude_deg,
 		gps.longitude_deg);
 
-	const float total_distance_m = _pos_context.target_ned.norm(); 
-
-	if (total_distance_m <= 0 || _pos_context.max_speed <= 0)
-	{
-		return;
-	}
-
-	const float transition_duration_s = kMaxSlope * total_distance_m / _pos_context.max_speed;
-
-	const auto elapsed_fraction = dt / transition_duration_s;
-	_pos_context.progress = math::min(_pos_context.progress + elapsed_fraction, 1.f);
-
-	const auto position_fraction = rampQuintic(_pos_context.progress);
-	const auto position_rate_fraction = rampQuinticDerivative(_pos_context.progress);
-
-	// offset = full_offset * ramp(progress)
-	const matrix::Vector3f false_offset_position = _pos_context.target_ned * position_fraction;
-	// offset_vel = full_offset * ramp_dt(progress) / duration
-	const matrix::Vector3f false_offset_velocity = _pos_context.target_ned * position_rate_fraction / transition_duration_s;
-
 	// spoofed pos
-	spoofed_position_ne += matrix::Vector2f{false_offset_position(0), false_offset_position(1)};
+	spoofed_position_ne += matrix::Vector2f{offset.position_offset_ned(0), offset.position_offset_ned(1)};
 	// spoofed alt
-	gps.altitude_msl_m -= static_cast<double>(false_offset_position(2));
-	gps.altitude_ellipsoid_m -= static_cast<double>(false_offset_position(2));
+	gps.altitude_msl_m -= static_cast<double>(offset.position_offset_ned(2));
+	gps.altitude_ellipsoid_m -= static_cast<double>(offset.position_offset_ned(2));
 	// spoofed vel
-	gps.vel_n_m_s += false_offset_velocity(0);
-	gps.vel_e_m_s += false_offset_velocity(1);
-	gps.vel_d_m_s += false_offset_velocity(2);
+	gps.vel_n_m_s += offset.velocity_offset_ned(0);
+	gps.vel_e_m_s += offset.velocity_offset_ned(1);
+	gps.vel_d_m_s += offset.velocity_offset_ned(2);
 	gps.vel_m_s = sqrtf(gps.vel_n_m_s * gps.vel_n_m_s + gps.vel_e_m_s * gps.vel_e_m_s);
 	gps.cog_rad = atan2f(gps.vel_e_m_s, gps.vel_n_m_s);
 
@@ -164,10 +111,10 @@ void GnssSpoofGen::spoofGradualOffset(sensor_gps_s &gps)
 			"false_p=(%.1f,%.1f) false_v=(%.1f,%.1f)",
 			(double)dt,
 			(double)_pos_context.progress,
-			(double)false_offset_position(0),
-			(double)false_offset_position(1),
-			(double)false_offset_velocity(0),
-			(double)false_offset_velocity(1));
+			(double)offset.position_offset_ned(0),
+			(double)offset.position_offset_ned(1),
+			(double)offset.velocity_offset_ned(0),
+			(double)offset.velocity_offset_ned(1));
 	}
 }
 
@@ -205,63 +152,35 @@ void GnssSpoofGen::spoofGradualCarryOff(sensor_gps_s &gps)
 	const float dt = (gps.timestamp_sample - _pos_context.last_sample_time_us) / 1e6f;
 	_pos_context.last_sample_time_us = gps.timestamp_sample;
 
-	const matrix::Vector3f path_displacement = _pos_context.target_ned - _pos_context.start_ned;
-	const float total_distance_m = path_displacement.norm();
-
-	if (total_distance_m <= FLT_EPSILON || _pos_context.max_speed <= 0)
-	{
-		return;
-	}
-
 	const matrix::Vector3f start_velocity_ned{
 		_pos_context.start_sample.vel_n_m_s,
 		_pos_context.start_sample.vel_e_m_s,
 		0.f,
 	};
+	const GnssSpoofing::GradualCarryOffSample carry_off = GnssSpoofing::gradualCarryOff(
+			_pos_context.start_ned,
+			start_velocity_ned,
+			_pos_context.target_ned,
+			_pos_context.max_speed,
+			_pos_context.progress,
+			dt);
 
-	const float start_speed_m_s = start_velocity_ned.norm();
-	const float available_added_speed_m_s = _pos_context.max_speed - start_speed_m_s;
+	_pos_context.progress = carry_off.progress;
 
-	if (available_added_speed_m_s <= 0.f)
-	{
-		//PX4_WARN("carryoff max speed must exceed start speed");
-		return;
-	}
-
-	const float transition_duration_s = kMaxSlope * total_distance_m / available_added_speed_m_s;
-
-	const float elapsed_fraction = dt / transition_duration_s;
-	_pos_context.progress = math::min(_pos_context.progress + elapsed_fraction, 1.f);
-
-	const float position_fraction = rampQuintic(_pos_context.progress);
-	const float position_rate_fraction = rampQuinticDerivative(_pos_context.progress);
-
-	const float initial_velocity_fraction = rampQuinticCarryOffInitial(_pos_context.progress);
-	const float initial_velocity_rate_fraction = rampQuinticDerivativeCarryOffInitial(_pos_context.progress);
-
-	const matrix::Vector3f false_position_ned =
-		_pos_context.start_ned
-		+ path_displacement * position_fraction // new trajectory contribution
-		+ start_velocity_ned * (transition_duration_s * initial_velocity_fraction); // old trajectory contribution
-
-	const matrix::Vector3f false_velocity_ned =
-		path_displacement * (position_rate_fraction / transition_duration_s) // new trajectory contribution
-		+ start_velocity_ned * initial_velocity_rate_fraction; // old trajectory contribution
-	
 	double spoofed_lat{};
 	double spoofed_lon{};
 
 	_origin_projection.reproject(
-		false_position_ned(0),
-		false_position_ned(1),
+		carry_off.position_ned(0),
+		carry_off.position_ned(1),
 		spoofed_lat,
 		spoofed_lon);
 
 	gps.latitude_deg = spoofed_lat;
 	gps.longitude_deg = spoofed_lon;
 
-	gps.vel_n_m_s = false_velocity_ned(0);
-	gps.vel_e_m_s = false_velocity_ned(1);
+	gps.vel_n_m_s = carry_off.velocity_ned(0);
+	gps.vel_e_m_s = carry_off.velocity_ned(1);
 
 	gps.vel_m_s = sqrtf(gps.vel_n_m_s * gps.vel_n_m_s + gps.vel_e_m_s * gps.vel_e_m_s);
 

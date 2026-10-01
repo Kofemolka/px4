@@ -3,11 +3,13 @@ px4_add_unit_gtest(
 	EXTRA_SRCS
 		../gnss_analyzer.cpp
 		../gnss_kf.cpp
+		../../gnss_spoofing_generator/spoofing_profiles.cpp
 		${CMAKE_SOURCE_DIR}/platforms/posix/src/px4/common/test_stubs/stub_daemon.cpp
 	COMPILE_FLAGS
 		-DMODULE_NAME=\"navputer\"
 	INCLUDES
 		..
+		${CMAKE_CURRENT_SOURCE_DIR}/../../gnss_spoofing_generator
 		${CMAKE_CURRENT_SOURCE_DIR}/../../../ekf2/EKF
 		${CMAKE_CURRENT_SOURCE_DIR}/../../../ekf2/EKF/python
 	LINKLIBS
