@@ -71,8 +71,11 @@ struct GnssEndpoint
 	matrix::Vector3f gnss_position_ned_variance{};
 	matrix::Vector3f gnss_velocity_ned{};
 	matrix::Vector3f gnss_velocity_ned_variance{};
+	matrix::Vector3f gnss_raw_velocity_ned{};
+
 	matrix::Vector3f imu_cumulative_delta_velocity_ned{};
-	matrix::Vector3f imu_cumulative_delta_velocity_variance{};
+	matrix::Vector3f imu_cumulative_white_noise_velocity_variance{};
+	matrix::Vector3f imu_acceleration_bias_variance{};
 };
 struct GnssRaw
 {
@@ -84,7 +87,8 @@ struct ImuCumulativeVelocityEndpoint
 {
 	uint64_t time_us{0};
 	matrix::Vector3f cumulative_velocity{};
-	matrix::Vector3f cumulative_velocity_variance{};
+	matrix::Vector3f cumulative_white_noise_velocity_variance{};
+	matrix::Vector3f acceleration_bias_variance{};
 };
 struct AuxPositionSample
 {
@@ -121,11 +125,27 @@ protected:
 	uint64_t _last_analysis_time_us{0};
 };
 
+struct GnssImuDeltaVelocityDiagnostics
+{
+	bool valid{false};
+	float window_dt_s{0.f};
+	matrix::Vector3f raw_gnss_delta_velocity{};
+	matrix::Vector3f filtered_gnss_delta_velocity{};
+	matrix::Vector3f imu_delta_velocity{};
+	matrix::Vector3f residual{};
+	matrix::Vector3f residual_variance{};
+	float normalized_error{0.f};
+};
+
 class GnssImuDeltaVelocityAnalyzer final : public BasicAnomalyAnalyzer
 {
 public:
 	void reset(float initial_suspicion);
 	void analyze(const GnssAnalyzerTypes::GnssEndpointHistory &history);
+	const GnssImuDeltaVelocityDiagnostics &diagnostics() const { return _diagnostics; }
+
+private:
+	GnssImuDeltaVelocityDiagnostics _diagnostics{};
 };
 
 class GnssVelocityConsistencyAnalyzer final : public BasicAnomalyAnalyzer
@@ -186,6 +206,8 @@ struct GnssAnalyzerExtendedState
 	double position_suspicion;
 	bool needs_aux_recovery;
 	GnssAnalyzerTypes::GnssKFSnapshot gnss_kf_snapshot;
+	GnssAnalyzerTypes::GnssImuDeltaVelocityDiagnostics imu_velocity_diagnostics;
+	float gnss_kf_acceleration_noise_density_squared;
 };
 } // namespace GnssAnalyzerTypes
 
@@ -207,6 +229,7 @@ private:
 	void recalculateState(const uint64_t last_gnss_sample);
 	void resetInternalGnssKF();
 	void updateGnssKFSnapshot();
+	void updateGnssKfProcessNoise(const DeltaVelocityEarth &sample);
 private:
 	GnssSpoofingState _state{GnssSpoofingState::NoOrigin};
 	GnssKalmanFilter _gnss_kf;
@@ -220,7 +243,9 @@ private:
 	GnssAnalyzerTypes::IndependentRecoveryLatch _recovery_latch;
 
 	matrix::Vector3f _imu_cumulative_velocity_ned{};
-	matrix::Vector3f _imu_cumulative_velocity_variance{};
+	matrix::Vector3f _imu_cumulative_white_noise_velocity_variance{};
+	float _filtered_horizontal_acceleration_squared{0.f};
+	float _gnss_kf_acceleration_noise_density_squared{0.25f};
 
 	GnssAnalyzerTypes::GnssImuDeltaVelocityAnalyzer _imu_velocity_analyzer;
 	GnssAnalyzerTypes::GnssVelocityConsistencyAnalyzer _gnss_velocity_consistency_analyzer;

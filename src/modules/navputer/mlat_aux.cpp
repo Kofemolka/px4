@@ -31,6 +31,11 @@ constexpr uint8_t kAgpId = 111;
 
 } // namespace
 
+MlatAux::MlatAux(ModuleParams* parent)
+	: ModuleParams(parent)
+{
+}
+
 float MlatAux::squaredNorm(const matrix::Vector2f &v)
 {
 	return v(0) * v(0) + v(1) * v(1);
@@ -571,7 +576,7 @@ float MlatAux::calculateMlatEph(const BeaconInput* const inputs,
 	}
 
 	// conservative sigma_beac
-	float sigma_beac = 0.f;
+	float sigma_beac = _param_rngbcn_noise.get();
 	for (int i = 0; i < num_inputs; ++i)
 	{
 		if (PX4_ISFINITE(inputs[i].range_accuracy)

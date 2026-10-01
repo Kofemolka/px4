@@ -65,6 +65,9 @@ public:
 	void reset();
 	bool process(const Measurement &sample);
 
+	void setAccelerationNoiseDensitySquared(float noise_density_squared);
+	float accelerationNoiseDensitySquared() const;
+
 	const Vector6f& state() const;
 	const Matrix6f& covariance() const;
 	uint64_t lastUpdateTimeUs() const;
@@ -82,6 +85,7 @@ private:
 	Vector6f _state{};
 	Matrix6f _P{};
 	uint64_t _time_us{0};
+	float _acceleration_noise_density_squared{0.25f};
 	bool _initialized{false};
 };
 

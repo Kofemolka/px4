@@ -4,6 +4,8 @@ px4_add_module(
 	SRCS
 		gnss_spoof_gen.cpp
 		gnss_spoof_gen.hpp
+		spoofing_profiles.cpp
+		spoofing_profiles.hpp
 	DEPENDS
 		px4_work_queue
 )

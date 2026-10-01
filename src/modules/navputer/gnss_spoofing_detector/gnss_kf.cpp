@@ -46,7 +46,6 @@
 
 namespace
 {
-constexpr float kAccelerationNoiseDensitySq = 0.25f; // m^2/s^3
 constexpr float kMaxGnssGapS = 5.f; // sec
 
 constexpr float kMinHorizontalPositionStd = 0.5f;  // m
@@ -162,6 +161,19 @@ uint64_t GnssKalmanFilter::lastUpdateTimeUs() const
 	return _time_us;
 }
 
+void GnssKalmanFilter::setAccelerationNoiseDensitySquared(float noise_density_squared)
+{
+	if (PX4_ISFINITE(noise_density_squared) && noise_density_squared >= 0.f)
+	{
+		_acceleration_noise_density_squared = noise_density_squared;
+	}
+}
+
+float GnssKalmanFilter::accelerationNoiseDensitySquared() const
+{
+	return _acceleration_noise_density_squared;
+}
+
 void GnssKalmanFilter::reset()
 {
 	_state.setZero();
@@ -190,7 +202,7 @@ GnssKalmanFilter::Matrix6f GnssKalmanFilter::buildProcessNoiseMatrixQ(const floa
 	Matrix6f Q;
 	Q.setZero();
 
-	const float q = kAccelerationNoiseDensitySq;
+	const float q = _acceleration_noise_density_squared;
 	const float dt2 = dt * dt;
 	const float dt3 = dt2 * dt;
 
