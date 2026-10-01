@@ -207,7 +207,13 @@ if [ -n "${PX4_SIM_MODEL#*gz_}" ] && [ -z "${PX4_GZ_MODEL_NAME}" ]; then
 elif [ -n "${PX4_GZ_MODEL_NAME}" ]; then
 	# Connect to existing model
 	echo "INFO  [init] PX4_GZ_MODEL_NAME set, PX4 will attach to existing model"
-	if ! gz_bridge start -w "${PX4_GZ_WORLD}" -n "${PX4_GZ_MODEL_NAME}"; then
+	gz_bridge_flags=""
+	if [ -n "${PX4_GZ_PASSIVE}" ]; then
+		echo "INFO  [init] PX4_GZ_PASSIVE set, sensors only (no actuator outputs)"
+		gz_bridge_flags="-p"
+	fi
+	# shellcheck disable=SC2086
+	if ! gz_bridge start -w "${PX4_GZ_WORLD}" -n "${PX4_GZ_MODEL_NAME}" ${gz_bridge_flags}; then
 		echo "ERROR [init] gz_bridge failed to start and attach to existing model"
 		exit 1
 	fi

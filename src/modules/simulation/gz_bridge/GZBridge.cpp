@@ -45,11 +45,12 @@
 
 ModuleBase::Descriptor GZBridge::desc{task_spawn, custom_command, print_usage};
 
-GZBridge::GZBridge(const std::string &world, const std::string &model_name) :
+GZBridge::GZBridge(const std::string &world, const std::string &model_name, bool passive) :
 	ModuleParams(nullptr),
 	ScheduledWorkItem(MODULE_NAME, px4::wq_configurations::rate_ctrl),
 	_world_name(world),
-	_model_name(model_name)
+	_model_name(model_name),
+	_passive(passive)
 {
 	updateParams();
 }
@@ -136,6 +137,12 @@ int GZBridge::init()
 		if (!subscribeLaserScan(false)) {
 			return PX4_ERROR;
 		}
+	}
+
+	if (_passive) {
+		PX4_INFO("passive mode, actuator outputs disabled");
+		ScheduleNow();
+		return OK;
 	}
 
 	// ESC mixing interface
@@ -902,12 +909,13 @@ int GZBridge::task_spawn(int argc, char *argv[])
 {
 	std::string world_name;
 	std::string model_name;
+	bool passive = false;
 
 	int myoptind = 1;
 	int ch;
 	const char *myoptarg = nullptr;
 
-	while ((ch = px4_getopt(argc, argv, "w:n:", &myoptind, &myoptarg)) != EOF) {
+	while ((ch = px4_getopt(argc, argv, "w:n:p", &myoptind, &myoptarg)) != EOF) {
 		switch (ch) {
 		case 'w':
 			world_name = myoptarg;
@@ -917,15 +925,19 @@ int GZBridge::task_spawn(int argc, char *argv[])
 			model_name = myoptarg;
 			break;
 
+		case 'p':
+			passive = true;
+			break;
+
 		default:
 			print_usage();
 			return PX4_ERROR;
 		}
 	}
 
-	PX4_INFO("world: %s, model: %s", world_name.c_str(), model_name.c_str());
+	PX4_INFO("world: %s, model: %s%s", world_name.c_str(), model_name.c_str(), passive ? " (passive)" : "");
 
-	GZBridge *instance = new GZBridge(world_name, model_name);
+	GZBridge *instance = new GZBridge(world_name, model_name, passive);
 
 	if (!instance) {
 		PX4_ERR("alloc failed");
@@ -980,6 +992,7 @@ int GZBridge::print_usage(const char *reason)
 	PRINT_MODULE_USAGE_COMMAND("start");
 	PRINT_MODULE_USAGE_PARAM_STRING('w', nullptr, nullptr, "World name", true);
 	PRINT_MODULE_USAGE_PARAM_STRING('n', nullptr, nullptr, "Model name", false);
+	PRINT_MODULE_USAGE_PARAM_FLAG('p', "Passive: sensors only, no actuator outputs (attach alongside another PX4)", true);
 	PRINT_MODULE_USAGE_DEFAULT_COMMANDS();
 
 	return 0;

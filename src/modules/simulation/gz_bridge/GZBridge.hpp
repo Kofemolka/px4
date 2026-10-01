@@ -89,7 +89,7 @@ class GZBridge : public ModuleBase, public ModuleParams, public px4::ScheduledWo
 public:
 	static Descriptor desc;
 
-	GZBridge(const std::string &world, const std::string &model_name);
+	GZBridge(const std::string &world, const std::string &model_name, bool passive = false);
 	~GZBridge() override;
 
 	/** @see ModuleBase */
@@ -177,6 +177,9 @@ private:
 
 	const std::string _world_name;
 	const std::string _model_name;
+
+	// Sensors only: no actuator/gimbal commands are sent to gz
+	const bool _passive;
 
 	float _temperature{15.0f}; // default temperature in Celsius
 
