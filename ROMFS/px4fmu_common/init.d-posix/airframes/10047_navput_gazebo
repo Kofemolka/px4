@@ -15,6 +15,8 @@ PX4_GZ_STANDALONE=${PX4_GZ_STANDALONE:=1}
 PX4_GZ_MODEL_NAME=${PX4_GZ_MODEL_NAME:=x500_0}
 PX4_GZ_PASSIVE=${PX4_GZ_PASSIVE:=1}
 
+param set EKF2_EN 0
+
 param set-default SIM_GZ_EN 1
 
 param set-default CA_AIRFRAME 0
@@ -43,16 +45,16 @@ param set-default EKF2_AGP0_CTRL 1
 param set-default EKF2_AGP0_NOISE 250
 
 # Navputer HW setup
+param set-default NPT_RNGBC_CTRL 1
+param set-default NPT_RNGBC_NOISE 75
 param set-default NPT_GPS_INSTANCE 1 # clean copy of gz GPS republished by spoofer
 param set-default NPT_GPS_CTRL 7
 param set-default NPT_SD_AUX_INST 1 # aux_global_position instance #0 (Beacon MLAT)
 
-# Gazebo has no ranging beacon simulation (SIH only)
-param set-default NPT_RNGBC_CTRL 0
-param set-default NPT_FUSE_RNGBC 0
-
+# Enable fusion of all NAVPUT sensors
 param set-default NPT_FUSE_BARO 1
 param set-default NPT_FUSE_MAG 1
+param set-default NPT_FUSE_RNGBC 1
 param set-default NPT_FUSE_AGP0 1
 param set-default NPT_FUSE_GPS 1
 param set-default NPT_FC_AGP_LATCH 5.0

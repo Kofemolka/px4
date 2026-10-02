@@ -31,4 +31,4 @@ if [[ "${build_tests}" == ON ]]; then
 fi
 
 cd build/px4_sitl_navput/rootfs
-PX4_SIM_MODEL=navput_quadx PX4_SIMULATOR=sihsim ../bin/px4
+PX4_SIM_MODEL=navput_sih PX4_SIMULATOR=sihsim ../bin/px4
